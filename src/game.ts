@@ -48,6 +48,11 @@ export class GameManager {
   public roundWinner: Player | null = null;
   public isHurryUp: boolean = false;
 
+  // Sudden Death (Falling Walls) after 45s
+  public suddenDeathIndex: number = 0;
+  public suddenDeathTimer: number = 0;
+  public suddenDeathPath: Array<{ x: number; y: number }> = [];
+
   private isRunning: boolean = false;
   private animFrameId: number | null = null;
 
@@ -108,11 +113,49 @@ export class GameManager {
     this.countdownTimer = 180;
     this.state = 'COUNTDOWN';
 
+    this.suddenDeathIndex = 0;
+    this.suddenDeathTimer = 0;
+    this.suddenDeathPath = this.generateSpiralPath();
+
     for (const p of this.players) {
       p.reset();
     }
 
     this.broadcastStats();
+  }
+
+  /**
+   * Generates inward spiral coordinates from inner ring (x: 1..13, y: 1..11)
+   */
+  private generateSpiralPath(): Array<{ x: number; y: number }> {
+    const path: Array<{ x: number; y: number }> = [];
+    let top = 1;
+    let bottom = 11;
+    let left = 1;
+    let right = 13;
+
+    while (top <= bottom && left <= right) {
+      // Top row (left to right)
+      for (let x = left; x <= right; x++) path.push({ x, y: top });
+      top++;
+
+      // Right col (top to bottom)
+      for (let y = top; y <= bottom; y++) path.push({ x: right, y });
+      right--;
+
+      if (top <= bottom) {
+        // Bottom row (right to left)
+        for (let x = right; x >= left; x--) path.push({ x, y: bottom });
+        bottom--;
+      }
+
+      if (left <= right) {
+        // Left col (bottom to top)
+        for (let y = bottom; y >= top; y--) path.push({ x: left, y });
+        left++;
+      }
+    }
+    return path;
   }
 
   public togglePause() {
@@ -206,11 +249,21 @@ export class GameManager {
     this.frameCount++;
     if (this.frameCount % 60 === 0 && this.roundTimeSeconds > 0) {
       this.roundTimeSeconds--;
-      if (this.roundTimeSeconds === 30 && !this.isHurryUp) {
+      if (this.roundTimeSeconds === 45 && !this.isHurryUp) {
         this.isHurryUp = true;
         sounds.playHurry();
       }
       this.broadcastStats();
+    }
+
+    // Sudden death: Drop indestructible walls from outside inward when time <= 45 seconds
+    if (this.roundTimeSeconds <= 45) {
+      this.suddenDeathTimer++;
+      // Every 22 frames (~0.36s), drop the next wall along the inward spiral
+      if (this.suddenDeathTimer >= 22) {
+        this.suddenDeathTimer = 0;
+        this.dropNextSuddenDeathWall();
+      }
     }
 
     // 1. Human (P1) input and movement
@@ -342,6 +395,66 @@ export class GameManager {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Drops an indestructible wall on the next spiral coordinate,
+   * crushing any soft blocks, items, bombs, and players on that tile.
+   */
+  private dropNextSuddenDeathWall() {
+    // Leave at least the center 3x3 tiles open to avoid 100% full board
+    if (this.suddenDeathIndex >= this.suddenDeathPath.length - 9) {
+      return;
+    }
+
+    const { x, y } = this.suddenDeathPath[this.suddenDeathIndex];
+    this.suddenDeathIndex++;
+
+    // If already a wall (e.g. inner pillar), still proceed to next
+    const currentTile = this.map.getTile(x, y);
+    if (currentTile === 1) { // TILE.WALL
+      return;
+    }
+
+    // Set tile to indestructible wall
+    this.map.setTile(x, y, 1); // TILE.WALL
+
+    // Remove any items on this tile
+    this.map.burnItemAt(x, y);
+
+    // Remove any soft block items hidden here
+    this.map.hiddenItems.delete(`${x},${y}`);
+
+    // Remove / trigger any bomb on this tile
+    const bombIndex = this.bombManager.bombs.findIndex((b) => b.tileX === x && b.tileY === y);
+    if (bombIndex !== -1) {
+      const b = this.bombManager.bombs[bombIndex];
+      this.bombManager.bombs.splice(bombIndex, 1);
+      const owner = this.players.find((p) => p.config.id === b.ownerId);
+      if (owner && owner.activeBombs > 0) owner.activeBombs--;
+    }
+
+    // Impact FX and sound
+    const px = x * 48 + 24;
+    const py = y * 48 + 24;
+    sounds.playWallThud();
+    this.particles.triggerShake(4, 8);
+    this.particles.addBlockDebris(px, py, 14);
+
+    // Check if any player is crushed by this wall
+    for (const p of this.players) {
+      if (p.isAlive && p.tileX === x && p.tileY === y) {
+        // Direct crush is instantly fatal regardless of shield
+        p.shield = 0;
+        p.hit();
+        sounds.playPlayerDeath();
+        this.particles.triggerShake(8, 20);
+        this.particles.addExplosionParticles(p.x, p.y, 24);
+        if (p.config.id === 0) {
+          this.input.vibrate(0, 500, 1.0, 0.9);
+        }
+      }
+    }
   }
 
   private checkRoundOutcome() {

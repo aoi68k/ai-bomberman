@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const secs = stats.timeRemaining % 60;
     timerBadge.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 
-    if (stats.timeRemaining <= 30 && stats.timeRemaining > 0) {
+    if (stats.timeRemaining <= 45 && stats.timeRemaining > 0) {
       timerBadge.classList.add('hurry');
     } else {
       timerBadge.classList.remove('hurry');

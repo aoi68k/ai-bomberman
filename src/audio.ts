@@ -219,6 +219,28 @@ class SoundManager {
     osc.stop(t + 0.46);
   }
 
+  public playWallThud() {
+    this.initContext();
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(140, t);
+    osc.frequency.exponentialRampToValueAtTime(35, t + 0.18);
+
+    gain.gain.setValueAtTime(0.7, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc.stop(t + 0.22);
+  }
+
   public playWin() {
     this.initContext();
     if (!this.ctx || !this.sfxGain || this.isMuted) return;
