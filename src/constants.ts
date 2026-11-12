@@ -48,8 +48,8 @@ export const INITIAL_BOMBS = 1;
 export const MAX_BOMBS = 8;
 export const INITIAL_POWER = 1;
 export const MAX_POWER = 8;
-export const PLAYER_HITBOX_RADIUS = 16; // Collision circle radius
-export const CORNERING_ASSIST_THRESHOLD = 18; // Max distance to snap/slide around corners
+export const PLAYER_HITBOX_RADIUS = 13.5; // Collision radius (lenient for smooth turns and corridor clearance)
+export const CORNERING_ASSIST_THRESHOLD = 24; // Half-tile distance to snap/slide around corners and crossroads
 
 // Character Skills
 export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY';

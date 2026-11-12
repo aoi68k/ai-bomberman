@@ -106,15 +106,24 @@ export class Player {
   }
 
   /**
-   * Checks if a point collides with walls or non-passable bombs
+   * Checks if a point collides with walls or non-passable bombs.
+   * Uses an 8-point chamfered bounding box so players don't snag on microscopic corner pixels.
    */
   private isColliding(checkX: number, checkY: number, map: GameMap, bombManager: BombManager): boolean {
     const r = PLAYER_HITBOX_RADIUS;
+    const c = 3.0; // Corner chamfer offset (3px) prevents snagging on sharp corner edges
+
     const points = [
-      { x: checkX - r, y: checkY - r },
-      { x: checkX + r, y: checkY - r },
-      { x: checkX - r, y: checkY + r },
-      { x: checkX + r, y: checkY + r },
+      // Top and bottom edges (slightly inset from corners)
+      { x: checkX - r + c, y: checkY - r },
+      { x: checkX + r - c, y: checkY - r },
+      { x: checkX - r + c, y: checkY + r },
+      { x: checkX + r - c, y: checkY + r },
+      // Left and right edges (slightly inset from corners)
+      { x: checkX - r, y: checkY - r + c },
+      { x: checkX - r, y: checkY + r - c },
+      { x: checkX + r, y: checkY - r + c },
+      { x: checkX + r, y: checkY + r - c },
     ];
 
     for (const pt of points) {
@@ -139,7 +148,17 @@ export class Player {
   }
 
   /**
-   * Core movement with cornering / sliding assist for classic Bomberman feel
+   * Helper to check if a tile is walkable and not blocked by a solid bomb
+   */
+  private isTilePassable(tx: number, ty: number, map: GameMap, bombManager: BombManager): boolean {
+    if (!map.isWalkable(tx, ty)) return false;
+    const bomb = bombManager.getBombAt(tx, ty);
+    if (bomb && !bomb.passablePlayers.has(this.config.id)) return false;
+    return true;
+  }
+
+  /**
+   * Core movement with smart cornering / sliding assist for classic Bomberman feel
    */
   public move(
     inputDx: number,
@@ -173,40 +192,84 @@ export class Player {
     let moveX = inputDx * this.speed;
     let moveY = inputDy * this.speed;
 
-    // --- CORNERING ASSIST (Wall Sliding) ---
-    // If moving horizontally, assist vertical alignment towards tile center
-    // If moving vertically, assist horizontal alignment towards tile center
-    const tileCenterX = this.tileX * TILE_SIZE + TILE_SIZE / 2;
-    const tileCenterY = this.tileY * TILE_SIZE + TILE_SIZE / 2;
+    let assistedX = false;
+    let assistedY = false;
 
-    if (inputDx !== 0 && inputDy === 0) {
-      const diffY = this.y - tileCenterY;
-      // If we are slightly misaligned with tile center and moving forward hits a wall,
-      // nudge towards the tile center so player smoothly turns into hallways!
-      if (Math.abs(diffY) > 2 && Math.abs(diffY) < CORNERING_ASSIST_THRESHOLD) {
-        const testNextX = this.x + moveX;
-        if (this.isColliding(testNextX, this.y, map, bombManager)) {
-          const nudgeY = -Math.sign(diffY) * Math.min(Math.abs(diffY), this.speed * 0.9);
-          if (!this.isColliding(this.x, this.y + nudgeY, map, bombManager)) {
-            this.y += nudgeY;
+    // --- SMART CORNERING ASSIST (Turning at Crossroads & Wall Sliding) ---
+    // 1. Horizontal movement assist: if player wants to move horizontally but is blocked,
+    // look for an open crossroad turn or hallway center within CORNERING_ASSIST_THRESHOLD
+    if (inputDx !== 0) {
+      const testNextX = this.x + moveX;
+      if (this.isColliding(testNextX, this.y, map, bombManager)) {
+        const nextTx = this.tileX + Math.sign(inputDx);
+        const candidateRows = [this.tileY, this.tileY - 1, this.tileY + 1];
+
+        let bestCandidateY: number | null = null;
+        let bestDistY = Infinity;
+
+        for (const candTy of candidateRows) {
+          if (
+            this.isTilePassable(nextTx, candTy, map, bombManager) &&
+            this.isTilePassable(this.tileX, candTy, map, bombManager)
+          ) {
+            const centerY = candTy * TILE_SIZE + TILE_SIZE / 2;
+            const dist = Math.abs(this.y - centerY);
+            if (dist < bestDistY) {
+              bestDistY = dist;
+              bestCandidateY = centerY;
+            }
           }
         }
-      }
-    } else if (inputDy !== 0 && inputDx === 0) {
-      const diffX = this.x - tileCenterX;
-      if (Math.abs(diffX) > 2 && Math.abs(diffX) < CORNERING_ASSIST_THRESHOLD) {
-        const testNextY = this.y + moveY;
-        if (this.isColliding(this.x, testNextY, map, bombManager)) {
-          const nudgeX = -Math.sign(diffX) * Math.min(Math.abs(diffX), this.speed * 0.9);
-          if (!this.isColliding(this.x + nudgeX, this.y, map, bombManager)) {
-            this.x += nudgeX;
+
+        if (bestCandidateY !== null && bestDistY <= CORNERING_ASSIST_THRESHOLD && bestDistY > 0.5) {
+          const diffY = this.y - bestCandidateY;
+          const nudgeY = -Math.sign(diffY) * Math.min(Math.abs(diffY), this.speed);
+          if (!this.isColliding(this.x, this.y + nudgeY, map, bombManager)) {
+            this.y += nudgeY;
+            assistedY = true;
           }
         }
       }
     }
 
-    // Try moving X axis
-    if (moveX !== 0) {
+    // 2. Vertical movement assist: if player wants to move vertically but is blocked,
+    // look for an open crossroad turn or hallway center within CORNERING_ASSIST_THRESHOLD
+    if (inputDy !== 0) {
+      const testNextY = this.y + moveY;
+      if (this.isColliding(this.x, testNextY, map, bombManager)) {
+        const nextTy = this.tileY + Math.sign(inputDy);
+        const candidateCols = [this.tileX, this.tileX - 1, this.tileX + 1];
+
+        let bestCandidateX: number | null = null;
+        let bestDistX = Infinity;
+
+        for (const candTx of candidateCols) {
+          if (
+            this.isTilePassable(candTx, nextTy, map, bombManager) &&
+            this.isTilePassable(candTx, this.tileY, map, bombManager)
+          ) {
+            const centerX = candTx * TILE_SIZE + TILE_SIZE / 2;
+            const dist = Math.abs(this.x - centerX);
+            if (dist < bestDistX) {
+              bestDistX = dist;
+              bestCandidateX = centerX;
+            }
+          }
+        }
+
+        if (bestCandidateX !== null && bestDistX <= CORNERING_ASSIST_THRESHOLD && bestDistX > 0.5) {
+          const diffX = this.x - bestCandidateX;
+          const nudgeX = -Math.sign(diffX) * Math.min(Math.abs(diffX), this.speed);
+          if (!this.isColliding(this.x + nudgeX, this.y, map, bombManager)) {
+            this.x += nudgeX;
+            assistedX = true;
+          }
+        }
+      }
+    }
+
+    // Try moving X axis (skip if already guided vertically around corner)
+    if (moveX !== 0 && !assistedX) {
       if (!this.isColliding(this.x + moveX, this.y, map, bombManager)) {
         this.x += moveX;
       } else {
@@ -223,8 +286,8 @@ export class Player {
       }
     }
 
-    // Try moving Y axis
-    if (moveY !== 0) {
+    // Try moving Y axis (skip if already guided horizontally around corner)
+    if (moveY !== 0 && !assistedY) {
       if (!this.isColliding(this.x, this.y + moveY, map, bombManager)) {
         this.y += moveY;
       } else {

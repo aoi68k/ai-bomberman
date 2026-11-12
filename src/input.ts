@@ -182,11 +182,30 @@ export class InputManager {
       let padDx = 0;
       let padDy = 0;
 
-      if (dpadLeft || stickX < -DEADZONE) padDx = -1;
-      else if (dpadRight || stickX > DEADZONE) padDx = 1;
+      // D-Pad takes direct digital priority
+      if (dpadLeft) padDx = -1;
+      else if (dpadRight) padDx = 1;
 
-      if (dpadUp || stickY < -DEADZONE) padDy = -1;
-      else if (dpadDown || stickY > DEADZONE) padDy = 1;
+      if (dpadUp) padDy = -1;
+      else if (dpadDown) padDy = 1;
+
+      // Analog stick filtering: prioritize dominant axis to avoid unintentional diagonal stickiness
+      if (padDx === 0 && padDy === 0) {
+        const absX = Math.abs(stickX);
+        const absY = Math.abs(stickY);
+
+        if (absX > DEADZONE || absY > DEADZONE) {
+          if (absX > absY * 1.3) {
+            padDx = stickX > 0 ? 1 : -1;
+          } else if (absY > absX * 1.3) {
+            padDy = stickY > 0 ? 1 : -1;
+          } else {
+            // True diagonal
+            padDx = stickX > DEADZONE ? 1 : (stickX < -DEADZONE ? -1 : 0);
+            padDy = stickY > DEADZONE ? 1 : (stickY < -DEADZONE ? -1 : 0);
+          }
+        }
+      }
 
       if (padDx !== 0) dx = padDx;
       if (padDy !== 0) dy = padDy;
