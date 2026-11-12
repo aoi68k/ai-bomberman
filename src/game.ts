@@ -154,15 +154,24 @@ export class GameManager {
   }
 
   private update() {
-    // Check pause key
+    // Check input for Player 1
     const p1Input = this.input.getPlayerInput(0);
     if (p1Input.pause) {
       this.togglePause();
     }
 
-    if (p1Input.restart && (this.state === 'ROUND_OVER' || this.state === 'PAUSED')) {
-      this.startRound();
-      return;
+    // In ROUND_OVER state, allow (A) button (p1Input.bomb), Start button, or [R]/Select (p1Input.restart) to proceed to next round
+    if (this.state === 'ROUND_OVER') {
+      if ((p1Input.bomb || p1Input.restart || p1Input.pause) && this.roundOverTimer > 30) {
+        this.round++;
+        this.startRound();
+        return;
+      }
+    } else if (this.state === 'PAUSED') {
+      if (p1Input.restart) {
+        this.startRound();
+        return;
+      }
     }
 
     // STATE: COUNTDOWN
