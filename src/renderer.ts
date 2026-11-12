@@ -15,6 +15,7 @@ import { GameMap } from './map';
 import { BombManager, Bomb } from './bomb';
 import { Player } from './player';
 import { ParticleManager } from './particles';
+import { assets } from './assets';
 
 export class GameRenderer {
   private canvas: HTMLCanvasElement;
@@ -73,16 +74,24 @@ export class GameRenderer {
   }
 
   private drawFloor(ctx: CanvasRenderingContext2D) {
+    const floorImg = assets.getImage('floor');
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
-        const isEven = (x + y) % 2 === 0;
-        ctx.fillStyle = isEven ? '#1e293b' : '#182234'; // High-contrast arcade arena slate
-        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        const px = x * TILE_SIZE;
+        const py = y * TILE_SIZE;
 
-        // Subtle tile inner border
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x * TILE_SIZE + 0.5, y * TILE_SIZE + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+        if (floorImg) {
+          ctx.drawImage(floorImg, px, py, TILE_SIZE, TILE_SIZE);
+        } else {
+          const isEven = (x + y) % 2 === 0;
+          ctx.fillStyle = isEven ? '#1e293b' : '#182234'; // High-contrast arcade arena slate
+          ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+
+          // Subtle tile inner border
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(px + 0.5, py + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+        }
       }
     }
   }
@@ -104,6 +113,12 @@ export class GameRenderer {
   }
 
   private drawIndestructibleWall(ctx: CanvasRenderingContext2D, px: number, py: number, x: number, y: number) {
+    const wallImg = assets.getImage('wall');
+    if (wallImg) {
+      ctx.drawImage(wallImg, px, py, TILE_SIZE, TILE_SIZE);
+      return;
+    }
+
     // 3D Metallic Block with Highlights and Shadows
     const isEdge = x === 0 || x === COLS - 1 || y === 0 || y === ROWS - 1;
 
@@ -138,6 +153,12 @@ export class GameRenderer {
   }
 
   private drawSoftBlock(ctx: CanvasRenderingContext2D, px: number, py: number) {
+    const softBlockImg = assets.getImage('soft_block');
+    if (softBlockImg) {
+      ctx.drawImage(softBlockImg, px, py, TILE_SIZE, TILE_SIZE);
+      return;
+    }
+
     // Stylized Brick / Crate
     ctx.fillStyle = '#78350f'; // Dark base
     ctx.fillRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4);
@@ -232,6 +253,7 @@ export class GameRenderer {
   }
 
   private drawBombs(ctx: CanvasRenderingContext2D, bombs: Bomb[]) {
+    const bombImg = assets.getImage('bomb');
     for (const bomb of bombs) {
       const px = bomb.pixelX;
       const py = bomb.pixelY;
@@ -250,7 +272,18 @@ export class GameRenderer {
       ctx.ellipse(0, 14, 15, 6, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Bomb body (Sphere with 3D gradient)
+      if (bombImg) {
+        // Red flashing state before detonation
+        if (bomb.timer < 35 && Math.floor(bomb.timer / 4) % 2 === 0) {
+          ctx.filter = 'hue-rotate(300deg) brightness(1.4)';
+        }
+        ctx.drawImage(bombImg, -TILE_SIZE / 2, -TILE_SIZE / 2, TILE_SIZE, TILE_SIZE);
+        ctx.filter = 'none';
+        ctx.restore();
+        continue;
+      }
+
+      // Bomb body (Sphere with 3D gradient fallback)
       const grad = ctx.createRadialGradient(-5, -6, 2, 0, 0, 17);
       if (bomb.timer < 35 && Math.floor(bomb.timer / 4) % 2 === 0) {
         // Red flashing state before detonation
@@ -363,57 +396,70 @@ export class GameRenderer {
     // Walking leg bobbing
     const walkBob = p.isMoving ? Math.sin(p.animFrame * 0.25) * 2 : 0;
 
-    // Body (Suit)
-    ctx.fillStyle = p.config.color;
-    ctx.beginPath();
-    ctx.roundRect(-10, -4 + walkBob, 20, 18, 6);
-    ctx.fill();
+    // Check custom character image
+    const playerImgKey = `player_${p.config.id}` as any;
+    const playerImg = assets.getImage(playerImgKey);
 
-    // Belt / Trim
-    ctx.fillStyle = p.config.accentColor;
-    ctx.fillRect(-10, 4 + walkBob, 20, 4);
-
-    // Head / Helmet (Large rounded cute Bomberman shape)
-    ctx.fillStyle = p.config.subColor;
-    ctx.beginPath();
-    ctx.arc(0, -12 + walkBob, 14, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Visor / Face Area (Dark plate)
-    ctx.fillStyle = '#0f172a';
-    let visorOffsetX = 0;
-    let visorOffsetY = -12 + walkBob;
-    if (p.facing === 'left') visorOffsetX = -3;
-    if (p.facing === 'right') visorOffsetX = 3;
-    if (p.facing === 'up') visorOffsetY = -15 + walkBob;
-    if (p.facing === 'down') visorOffsetY = -11 + walkBob;
-
-    if (p.facing !== 'up') {
+    if (playerImg) {
+      ctx.save();
+      if (p.facing === 'left') {
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(playerImg, -TILE_SIZE / 2, -TILE_SIZE / 2 - 4 + walkBob, TILE_SIZE, TILE_SIZE);
+      ctx.restore();
+    } else {
+      // Body (Suit)
+      ctx.fillStyle = p.config.color;
       ctx.beginPath();
-      ctx.ellipse(visorOffsetX, visorOffsetY, 10, 7, 0, 0, Math.PI * 2);
+      ctx.roundRect(-10, -4 + walkBob, 20, 18, 6);
       ctx.fill();
 
-      // Cute Eyes
-      ctx.fillStyle = '#38bdf8';
-      const eyeSpacing = 4;
+      // Belt / Trim
+      ctx.fillStyle = p.config.accentColor;
+      ctx.fillRect(-10, 4 + walkBob, 20, 4);
+
+      // Head / Helmet (Large rounded cute Bomberman shape)
+      ctx.fillStyle = p.config.subColor;
       ctx.beginPath();
-      ctx.arc(visorOffsetX - eyeSpacing, visorOffsetY, 2.2, 0, Math.PI * 2);
-      ctx.arc(visorOffsetX + eyeSpacing, visorOffsetY, 2.2, 0, Math.PI * 2);
+      ctx.arc(0, -12 + walkBob, 14, 0, Math.PI * 2);
       ctx.fill();
 
-      // Eye highlights
-      ctx.fillStyle = '#ffffff';
+      // Visor / Face Area (Dark plate)
+      ctx.fillStyle = '#0f172a';
+      let visorOffsetX = 0;
+      let visorOffsetY = -12 + walkBob;
+      if (p.facing === 'left') visorOffsetX = -3;
+      if (p.facing === 'right') visorOffsetX = 3;
+      if (p.facing === 'up') visorOffsetY = -15 + walkBob;
+      if (p.facing === 'down') visorOffsetY = -11 + walkBob;
+
+      if (p.facing !== 'up') {
+        ctx.beginPath();
+        ctx.ellipse(visorOffsetX, visorOffsetY, 10, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cute Eyes
+        ctx.fillStyle = '#38bdf8';
+        const eyeSpacing = 4;
+        ctx.beginPath();
+        ctx.arc(visorOffsetX - eyeSpacing, visorOffsetY, 2.2, 0, Math.PI * 2);
+        ctx.arc(visorOffsetX + eyeSpacing, visorOffsetY, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eye highlights
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(visorOffsetX - eyeSpacing - 0.5, visorOffsetY - 0.5, 1, 0, Math.PI * 2);
+        ctx.arc(visorOffsetX + eyeSpacing - 0.5, visorOffsetY - 0.5, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Helmet Antenna Pom-Pom
+      ctx.fillStyle = p.config.accentColor;
       ctx.beginPath();
-      ctx.arc(visorOffsetX - eyeSpacing - 0.5, visorOffsetY - 0.5, 1, 0, Math.PI * 2);
-      ctx.arc(visorOffsetX + eyeSpacing - 0.5, visorOffsetY - 0.5, 1, 0, Math.PI * 2);
+      ctx.arc(0, -27 + walkBob, 4.5, 0, Math.PI * 2);
       ctx.fill();
     }
-
-    // Helmet Antenna Pom-Pom
-    ctx.fillStyle = p.config.accentColor;
-    ctx.beginPath();
-    ctx.arc(0, -27 + walkBob, 4.5, 0, Math.PI * 2);
-    ctx.fill();
 
     // Shield Aura if active
     if (p.shield > 0) {

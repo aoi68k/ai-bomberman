@@ -4,10 +4,14 @@ import './style.css';
 import { GameManager, GameStats } from './game';
 import { sounds } from './audio';
 import { GamepadInfo } from './input';
+import { assets } from './assets';
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
   if (!canvas) return;
+
+  // Preload any custom PNG assets in public/assets/images/
+  await assets.loadAll();
 
   const game = new GameManager(canvas);
 
