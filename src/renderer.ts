@@ -396,13 +396,19 @@ export class GameRenderer {
     // Walking leg bobbing
     const walkBob = p.isMoving ? Math.sin(p.animFrame * 0.25) * 2 : 0;
 
-    // Check custom character image (by charId or playerId)
-    const playerImg = assets.getImage(`char_${p.config.charId}` as any) ||
-                      assets.getImage(`player_${p.config.id}` as any);
+    // Check directional 2-frame motion sprite first, then fallback to idle / character / player
+    const walkFrame = p.isMoving ? (Math.floor(p.animFrame / 8) % 2) : 0;
+    const motionKey = `${p.config.charId}_${p.facing}_${walkFrame}`;
+    const playerImg = assets.getImage(motionKey) ||
+                      assets.getImage(`${p.config.charId}_${p.facing}_0`) ||
+                      assets.getImage(`char_${p.config.charId}`) ||
+                      assets.getImage(`player_${p.config.id}`);
 
     if (playerImg) {
       ctx.save();
-      if (p.facing === 'left') {
+      // Only flip horizontally if we fall back to a generic char_/player_ image facing left
+      const isMotionImage = assets.hasImage(motionKey) || assets.hasImage(`${p.config.charId}_${p.facing}_0`);
+      if (!isMotionImage && p.facing === 'left') {
         ctx.scale(-1, 1);
       }
       ctx.drawImage(playerImg, -TILE_SIZE / 2, -TILE_SIZE / 2 - 4 + walkBob, TILE_SIZE, TILE_SIZE);

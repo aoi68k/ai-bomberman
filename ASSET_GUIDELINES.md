@@ -24,25 +24,24 @@
 public/assets/images/
 ├── characters/
 │   ├── bomber_blue/           # キャラ1: ボンバーブルー（スタンダード）
-│   │   ├── idle.png           # 立ち絵（待機・正面）
-│   │   ├── walk.png           # 移動時画像（左右反転対応）
-│   │   ├── portrait.png       # キャラ選択画面用アイコン (64x64 or 128x128)
-│   │   └── skill_icon.png     # スキルアイコン
+│   │   ├── down_0.png, down_1.png   # 正面（下）歩行モーション 2コマ
+│   │   ├── up_0.png, up_1.png       # 背面（上）歩行モーション 2コマ
+│   │   ├── left_0.png, left_1.png   # 左向き歩行モーション 2コマ
+│   │   ├── right_0.png, right_1.png # 右向き歩行モーション 2コマ
+│   │   ├── idle.png                 # 待機・共通
+│   │   └── portrait.png             # キャラ選択画面用アイコン (64x64 or 128x128)
 │   ├── bomber_black/          # キャラ2: ボンバーブラック（スピードスター）
-│   │   ├── idle.png
-│   │   ├── walk.png
-│   │   ├── portrait.png
-│   │   └── skill_icon.png
+│   │   ├── down_0.png, down_1.png, up_0.png, up_1.png...
+│   │   ├── left_0.png, left_1.png, right_0.png, right_1.png...
+│   │   └── portrait.png
 │   ├── bomber_red/            # キャラ3: ボンバーレッド（パワーファイター）
-│   │   ├── idle.png
-│   │   ├── walk.png
-│   │   ├── portrait.png
-│   │   └── skill_icon.png
-│   └── bomber_green/          # キャラ4: ボンバーグリーン（トリッキー・ディフェンダー）
-│       ├── idle.png
-│       ├── walk.png
-│       ├── portrait.png
-│       └── skill_icon.png
+│   │   ├── down_0.png, down_1.png, up_0.png, up_1.png...
+│   │   ├── left_0.png, left_1.png, right_0.png, right_1.png...
+│   │   └── portrait.png
+│   └── bomber_green/          # キャラ4: ボンバーグリーン（ディフェンダー）
+│       ├── down_0.png, down_1.png, up_0.png, up_1.png...
+│       ├── left_0.png, left_1.png, right_0.png, right_1.png...
+│       └── portrait.png
 ├── environment/
 │   ├── wall.png               # 壊せない壁（ハードブロック）
 │   ├── soft_block.png         # 壊せるブロック（レンガ・木箱）
@@ -77,12 +76,26 @@ ChatGPTやMidjourney等で画像を生成する際は、以下のプロンプト
 
 ### 1. キャラクター用テンプレート (Prompt for Characters)
 ```text
-16-bit pixel art sprite of a cute retro bomberman character wearing a [COLOR] helmet with a pink antenna pom-pom, [COLOR] bomber suit, white visor with cute blue eyes, facing front, top-down arcade game perspective, isolated on pure solid black background (or transparent background), clean outline, 48x48 pixel art, no dithering, retro game asset --no text, shadows, realistic lighting
+16-bit pixel art sprite of a cute retro bomberman character wearing a [COLOR] helmet with a pink antenna pom-pom, [COLOR] bomber suit, white visor with cute blue eyes, [DIRECTION_AND_POSE], top-down arcade game perspective, isolated on transparent background, clean outline, 48x48 pixel art, no dithering, retro game asset --no text, shadows, realistic lighting
 ```
-* **Blue**: `[COLOR]` を `bright blue` に置換
-* **Black**: `[COLOR]` を `dark charcoal and red visor accents` に置換
-* **Red**: `[COLOR]` を `vibrant crimson red` に置換
-* **Green**: `[COLOR]` を `emerald green with yellow visor accents` に置換
+* **カラー置換**:
+  * **Blue**: `[COLOR]` を `bright blue` に置換
+  * **Black**: `[COLOR]` を `dark charcoal and red visor accents` に置換
+  * **Red**: `[COLOR]` を `vibrant crimson red` に置換
+  * **Green**: `[COLOR]` を `emerald green with yellow visor accents` に置換
+* **方向・ポーズ置換 `[DIRECTION_AND_POSE]`**:
+  * **下向き（正面）**:
+    * `down_0.png`: `facing front, neutral standing pose, left foot slightly forward`
+    * `down_1.png`: `facing front, walking motion pose, right foot slightly forward`
+  * **上向き（背面）**:
+    * `up_0.png`: `facing away from camera / back view, rear of helmet visible, left foot forward`
+    * `up_1.png`: `facing away from camera / back view, rear of helmet visible, right foot forward`
+  * **左向き**:
+    * `left_0.png`: `facing left side profile, walking motion frame 1`
+    * `left_1.png`: `facing left side profile, walking motion frame 2`
+  * **右向き**:
+    * `right_0.png`: `facing right side profile, walking motion frame 1`
+    * `right_1.png`: `facing right side profile, walking motion frame 2`
 
 ### 2. キャラ選択用アイコン (Portrait)
 ```text
