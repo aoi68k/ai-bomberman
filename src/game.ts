@@ -425,7 +425,7 @@ export class GameManager {
   }
 
   private tryPlaceBomb(player: Player): boolean {
-    if (!player.isAlive) return false;
+    if (!player.isAlive || player.stunTimer > 0) return false;
     if (player.activeBombs >= player.maxBombs) return false;
 
     // Determine all players overlapping this tile right now
@@ -462,7 +462,7 @@ export class GameManager {
    * Executes unique character skill
    */
   public tryUseSkill(player: Player): boolean {
-    if (!player.isAlive) return false;
+    if (!player.isAlive || player.stunTimer > 0) return false;
     if (player.skillCooldownTimer > 0) return false;
 
     const skillType = player.config.skillType;
@@ -491,6 +491,79 @@ export class GameManager {
           return true;
         }
         return false;
+      }
+
+      case 'TACKLE': {
+        // Tackle forward up to 3 tiles, stunning any opponent hit along the path for 3 seconds (180 frames)
+        const dirs = {
+          up: { dx: 0, dy: -1 },
+          down: { dx: 0, dy: 1 },
+          left: { dx: -1, dy: 0 },
+          right: { dx: 1, dy: 0 },
+        };
+        const { dx, dy } = dirs[player.facing];
+
+        let finalTx = player.tileX;
+        let finalTy = player.tileY;
+        const hitPlayers = new Set<Player>();
+
+        // Check path up to 3 tiles
+        for (let step = 1; step <= 3; step++) {
+          const checkTx = player.tileX + dx * step;
+          const checkTy = player.tileY + dy * step;
+
+          // Stop if hitting boundary wall, soft block, or bomb
+          if (!this.map.isWalkable(checkTx, checkTy) || this.bombManager.getBombAt(checkTx, checkTy)) {
+            break;
+          }
+
+          finalTx = checkTx;
+          finalTy = checkTy;
+
+          // Check if any opponent is hit along the charge line
+          const checkPx = checkTx * 48 + 24;
+          const checkPy = checkTy * 48 + 24;
+          for (const other of this.players) {
+            if (other.isAlive && other.config.id !== player.config.id) {
+              if (Math.hypot(other.x - checkPx, other.y - checkPy) < 38) {
+                hitPlayers.add(other);
+              }
+            }
+          }
+        }
+
+        // Must be able to advance at least 1 tile or have hit an adjacent opponent
+        if (finalTx === player.tileX && finalTy === player.tileY && hitPlayers.size === 0) {
+          return false;
+        }
+
+        // Apply stun to all hit opponents
+        let hitSomeone = false;
+        for (const target of hitPlayers) {
+          target.stun(180); // 3 seconds at 60fps
+          hitSomeone = true;
+          this.particles.addItemGetParticles(target.x, target.y, '#facc15');
+          this.particles.addExplosionParticles(target.x, target.y, 10);
+          if (target.config.id === 0) {
+            this.input.vibrate(0, 300, 0.8, 0.5);
+          }
+        }
+
+        // Visual rush shockwave & trail
+        this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
+        player.x = finalTx * 48 + 24;
+        player.y = finalTy * 48 + 24;
+        this.particles.addItemGetParticles(player.x, player.y, '#8b5cf6');
+        this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
+        this.particles.triggerShake(hitSomeone ? 6 : 3, 10);
+
+        player.skillCooldownTimer = player.config.skillCooldown;
+        sounds.playKick();
+        if (player.config.id === 0) {
+          this.input.vibrate(0, hitSomeone ? 250 : 120, hitSomeone ? 0.7 : 0.4, 0.3);
+        }
+
+        return true;
       }
 
       case 'REMOTE_DETONATE': {

@@ -38,7 +38,11 @@ public/assets/images/
 │   │   ├── down_0.png, down_1.png, up_0.png, up_1.png...
 │   │   ├── left_0.png, left_1.png, right_0.png, right_1.png...
 │   │   └── portrait.png
-│   └── bomber_green/          # キャラ4: ボンバーグリーン（ディフェンダー）
+│   ├── bomber_green/          # キャラ4: ボンバーグリーン（ディフェンダー）
+│   │   ├── down_0.png, down_1.png, up_0.png, up_1.png...
+│   │   ├── left_0.png, left_1.png, right_0.png, right_1.png...
+│   │   └── portrait.png
+│   └── bomber_purple/         # キャラ5: ボンバーパープル（ストライカー）
 │       ├── down_0.png, down_1.png, up_0.png, up_1.png...
 │       ├── left_0.png, left_1.png, right_0.png, right_1.png...
 │       └── portrait.png
@@ -59,7 +63,7 @@ public/assets/images/
 
 ## ⚡ キャラクター固有技（スキル）仕様一覧
 
-ゲーム開始前の**キャラクター選択画面**で以下の4人から選択できます。コントローラーの **Xボタン** または キーボードの **E / Shiftキー** で固有技を発動できます（クールダウン制）。
+ゲーム開始前の**キャラクター選択画面**で以下の5人から選択できます。コントローラーの **Xボタン** または キーボードの **E / Shiftキー** で固有技を発動できます（クールダウン制）。
 
 | キャラID | 名前 | 特徴 | 固有技名 | 固有技効果 | クールダウン |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -67,6 +71,7 @@ public/assets/images/
 | `bomber_black` | **ブラック (Black)** | アグレッシブ | **リモコンボム (Remote Detonate)** | 最後に置いた自分のボムを好きなタイミングで遠隔起爆 | 10秒 |
 | `bomber_red` | **レッド (Red)** | パワフル | **パワーボム (Mega Bomb)** | 次に置くボムが周囲のソフトブロックを貫通する巨大火炎ボムになる | 14秒 |
 | `bomber_green` | **グリーン (Green)** | テクニカル | **バリア生成 (Shield Deploy)** | 3秒間持続する爆風ガードシールドを即座に1枚展開 | 16秒 |
+| `bomber_purple` | **パープル (Purple)** | ストライカー | **スタンタックル (Tackle)** | 前方3マス先へ素早くタックル突進！衝突した相手を3秒間気絶（頭上に星が回転）させる | 10秒 |
 
 ---
 
@@ -83,6 +88,7 @@ ChatGPTやMidjourney等で画像を生成する際は、以下のプロンプト
   * **Black**: `[COLOR]` を `dark charcoal and red visor accents` に置換
   * **Red**: `[COLOR]` を `vibrant crimson red` に置換
   * **Green**: `[COLOR]` を `emerald green with yellow visor accents` に置換
+  * **Purple**: `[COLOR]` を `royal purple with gold accents and pink antenna` に置換
 * **方向・ポーズ置換 `[DIRECTION_AND_POSE]`**:
   * **下向き（正面）**:
     * `down_0.png`: `facing front, neutral standing pose, left foot slightly forward`

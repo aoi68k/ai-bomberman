@@ -5,6 +5,7 @@ import { GameManager, GameStats } from './game';
 import { sounds } from './audio';
 import { GamepadInfo } from './input';
 import { assets } from './assets';
+import { CHARACTERS } from './constants';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
@@ -46,12 +47,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const renderCharGrid = () => {
     charGrid.innerHTML = '';
-    const charList = [
-      { id: 'bomber_blue', name: 'ボンバーブルー', role: '万能・バランス', skill: '⚡ ダッシュ', desc: '向いている方向へ素早く2マス突進！爆風回避に' },
-      { id: 'bomber_black', name: 'ボンバーブラック', role: '速攻・アグレッシブ', skill: '💣 リモコン起爆', desc: '置いたボムを好きなタイミングで遠隔爆破！' },
-      { id: 'bomber_red', name: 'ボンバーレッド', role: '火力特化・破壊', skill: '🔥 メガボム', desc: '次回置くボムがブロック貫通の超特大メガボムになる！' },
-      { id: 'bomber_green', name: 'ボンバーグリーン', role: '守備特化・技巧', skill: '🛡️ 緊急シールド', desc: '爆風を防ぐエネルギーシールドを即座に1枚展開！' },
-    ];
+    const charList = Object.values(CHARACTERS).map((c) => ({
+      id: c.charId,
+      name: c.jpName,
+      role: c.role,
+      skill: c.skillName,
+      desc: c.skillDesc,
+    }));
 
     charList.forEach((c) => {
       const isSelected = game.selectedCharId === c.id;

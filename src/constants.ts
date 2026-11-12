@@ -52,7 +52,7 @@ export const PLAYER_HITBOX_RADIUS = 13.5; // Collision radius (lenient for smoot
 export const CORNERING_ASSIST_THRESHOLD = 24; // Half-tile distance to snap/slide around corners and crossroads
 
 // Character Skills
-export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY';
+export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY' | 'TACKLE';
 
 export interface CharacterInfo {
   charId: string;
@@ -125,6 +125,20 @@ export const CHARACTERS: Record<string, CharacterInfo> = {
     skillName: '緊急シールド (Shield)',
     skillDesc: '3秒間、爆風を防ぐエネルギーシールドを1枚展開！',
     skillCooldown: 900, // 15 seconds
+  },
+  bomber_purple: {
+    charId: 'bomber_purple',
+    name: 'Bomber Purple',
+    jpName: 'ボンバーパープル',
+    role: 'ストライカー',
+    folder: 'characters/bomber_purple',
+    color: '#8b5cf6',
+    subColor: '#ede9fe',
+    accentColor: '#fbbf24',
+    skillType: 'TACKLE',
+    skillName: 'スタンタックル (Tackle)',
+    skillDesc: '向いている方向へ3マス突進！当たった敵を3秒間スタンさせる',
+    skillCooldown: 600, // 10 seconds
   },
 };
 

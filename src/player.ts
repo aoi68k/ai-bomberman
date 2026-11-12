@@ -39,6 +39,7 @@ export class Player {
 
   public isAlive: boolean = true;
   public deathTimer: number = 0; // For death spin animation
+  public stunTimer: number = 0; // Stun duration in frames (stars over head, cannot act)
 
   public facing: 'up' | 'down' | 'left' | 'right' = 'down';
   public animFrame: number = 0;
@@ -68,6 +69,7 @@ export class Player {
     this.lastPlacedBombId = null;
     this.isAlive = true;
     this.deathTimer = 0;
+    this.stunTimer = 0;
     this.facing = this.config.spawnTileY < 6 ? 'down' : 'up';
     this.animFrame = 0;
     this.isMoving = false;
@@ -171,6 +173,13 @@ export class Player {
 
     if (this.invulnerableTimer > 0) {
       this.invulnerableTimer--;
+    }
+
+    // Stunned state: immobilized, cannot move or act
+    if (this.stunTimer > 0) {
+      this.stunTimer--;
+      this.isMoving = false;
+      return;
     }
 
     if (inputDx === 0 && inputDy === 0) {
@@ -332,5 +341,14 @@ export class Player {
     this.isAlive = false;
     this.deathTimer = 60;
     return true;
+  }
+
+  /**
+   * Applies stun to player for a duration in frames (default 180 frames = 3 seconds)
+   */
+  public stun(frames: number = 180) {
+    if (!this.isAlive) return;
+    this.stunTimer = Math.max(this.stunTimer, frames);
+    this.isMoving = false;
   }
 }

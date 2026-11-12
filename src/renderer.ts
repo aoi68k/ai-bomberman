@@ -387,6 +387,11 @@ export class GameRenderer {
       ctx.globalAlpha = 0.4;
     }
 
+    // Dizzy wobble when stunned
+    if (p.isAlive && p.stunTimer > 0) {
+      ctx.rotate(Math.sin(Date.now() / 90) * 0.12);
+    }
+
     // Shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
@@ -480,11 +485,55 @@ export class GameRenderer {
       ctx.shadowBlur = 0;
     }
 
+    // Stunned spinning stars over head
+    if (p.isAlive && p.stunTimer > 0) {
+      const now = Date.now();
+      const orbitSpeed = now / 140;
+      const numStars = 3;
+      const rx = 16;
+      const ry = 6;
+      const centerY = -30;
+
+      for (let i = 0; i < numStars; i++) {
+        const starAngle = orbitSpeed + (i * Math.PI * 2) / numStars;
+        const sx = Math.cos(starAngle) * rx;
+        const sy = centerY + Math.sin(starAngle) * ry;
+
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(now / 100 + i);
+
+        // 4-point star path
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        const outerR = 5.5;
+        const innerR = 2.0;
+        for (let pIdx = 0; pIdx < 8; pIdx++) {
+          const r = pIdx % 2 === 0 ? outerR : innerR;
+          const a = (pIdx * Math.PI) / 4;
+          const px = Math.cos(a) * r;
+          const py = Math.sin(a) * r;
+          if (pIdx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Inner white shine
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(0, 0, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
     // Name Tag over head
     ctx.font = 'bold 9px sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.textAlign = 'center';
-    ctx.fillText(p.config.name, 0, -32);
+    ctx.fillText(p.config.name, 0, p.stunTimer > 0 ? -42 : -32);
 
     ctx.restore();
   }
