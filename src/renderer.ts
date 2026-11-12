@@ -396,9 +396,9 @@ export class GameRenderer {
     // Walking leg bobbing
     const walkBob = p.isMoving ? Math.sin(p.animFrame * 0.25) * 2 : 0;
 
-    // Check custom character image
-    const playerImgKey = `player_${p.config.id}` as any;
-    const playerImg = assets.getImage(playerImgKey);
+    // Check custom character image (by charId or playerId)
+    const playerImg = assets.getImage(`char_${p.config.charId}` as any) ||
+                      assets.getImage(`player_${p.config.id}` as any);
 
     if (playerImg) {
       ctx.save();

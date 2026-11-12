@@ -24,6 +24,8 @@ export type ImageKey =
   | 'item_kick'
   | 'item_shield';
 
+import { DEFAULT_IMAGE_BASE64 } from './defaultImages';
+
 export class AssetManager {
   private images: Map<ImageKey, HTMLImageElement> = new Map();
   private loaded: Set<ImageKey> = new Set();
@@ -32,10 +34,10 @@ export class AssetManager {
    * Defines candidate file paths for each image resource
    */
   private assetManifest: Record<ImageKey, string[]> = {
-    wall: ['/assets/images/environment/wall.png', '/assets/images/wall.png'],
-    soft_block: ['/assets/images/environment/soft_block.png', '/assets/images/soft_block.png'],
-    floor: ['/assets/images/environment/floor.png', '/assets/images/floor.png'],
-    bomb: ['/assets/images/items/bomb.png', '/assets/images/bomb.png'],
+    wall: ['/assets/images/environment/wall.png', '/assets/images/wall.png', 'assets/images/environment/wall.png'],
+    soft_block: ['/assets/images/environment/soft_block.png', '/assets/images/soft_block.png', 'assets/images/environment/soft_block.png'],
+    floor: ['/assets/images/environment/floor.png', '/assets/images/floor.png', 'assets/images/environment/floor.png'],
+    bomb: ['/assets/images/items/bomb.png', '/assets/images/bomb.png', 'assets/images/items/bomb.png'],
 
     player_0: ['/assets/images/characters/bomber_blue/idle.png', '/assets/images/player_0.png'],
     player_1: ['/assets/images/characters/bomber_black/idle.png', '/assets/images/player_1.png'],
@@ -65,9 +67,23 @@ export class AssetManager {
         let index = 0;
         const tryNext = () => {
           if (index >= urls.length) {
-            resolve();
+            // Check if we have embedded default base64 PNG
+            const b64 = DEFAULT_IMAGE_BASE64[key];
+            if (b64) {
+              const b64Img = new Image();
+              b64Img.onload = () => {
+                this.images.set(key as ImageKey, b64Img);
+                this.loaded.add(key as ImageKey);
+                resolve();
+              };
+              b64Img.onerror = () => resolve();
+              b64Img.src = b64;
+            } else {
+              resolve();
+            }
             return;
           }
+
           const img = new Image();
           img.onload = () => {
             this.images.set(key as ImageKey, img);
