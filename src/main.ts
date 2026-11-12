@@ -23,7 +23,65 @@ document.addEventListener('DOMContentLoaded', async () => {
   const selComCount = document.getElementById('selComCount') as HTMLSelectElement;
   const gamepadStatus = document.getElementById('gamepadStatus') as HTMLElement;
   const gamepadIndicator = document.getElementById('gamepadIndicator') as HTMLElement;
-  const hudPlayers = document.getElementById('hudPlayers') as HTMLElement;
+  const btnCharSelect = document.getElementById('btnCharSelect') as HTMLButtonElement;
+  const charModal = document.getElementById('charModal') as HTMLElement;
+  const btnCloseModal = document.getElementById('btnCloseModal') as HTMLButtonElement;
+  const charGrid = document.getElementById('charGrid') as HTMLElement;
+
+  // Character Select Modal Setup
+  const openModal = () => {
+    charModal.classList.remove('hidden');
+    renderCharGrid();
+  };
+
+  const closeModal = () => {
+    charModal.classList.add('hidden');
+  };
+
+  btnCharSelect.addEventListener('click', openModal);
+  btnCloseModal.addEventListener('click', closeModal);
+  charModal.addEventListener('click', (e) => {
+    if (e.target === charModal) closeModal();
+  });
+
+  const renderCharGrid = () => {
+    charGrid.innerHTML = '';
+    const charList = [
+      { id: 'bomber_blue', name: 'ボンバーブルー', role: '万能・バランス', skill: '⚡ ダッシュ', desc: '向いている方向へ素早く2マス突進！爆風回避に' },
+      { id: 'bomber_black', name: 'ボンバーブラック', role: '速攻・アグレッシブ', skill: '💣 リモコン起爆', desc: '置いたボムを好きなタイミングで遠隔爆破！' },
+      { id: 'bomber_red', name: 'ボンバーレッド', role: '火力特化・破壊', skill: '🔥 メガボム', desc: '次回置くボムがブロック貫通の超特大メガボムになる！' },
+      { id: 'bomber_green', name: 'ボンバーグリーン', role: '守備特化・技巧', skill: '🛡️ 緊急シールド', desc: '爆風を防ぐエネルギーシールドを即座に1枚展開！' },
+    ];
+
+    charList.forEach((c) => {
+      const isSelected = game.selectedCharId === c.id;
+      const card = document.createElement('div');
+      card.className = `char-card ${isSelected ? 'selected' : ''}`;
+
+      const portraitImg = assets.getImage(`portrait_${c.id}` as any);
+      const portraitSrc = portraitImg ? portraitImg.src : `/assets/images/characters/${c.id}/idle.png`;
+
+      card.innerHTML = `
+        <img src="${portraitSrc}" alt="${c.name}" class="char-portrait" />
+        <div class="char-info">
+          <div class="char-name-row">
+            <span class="char-name">${c.name}</span>
+            <span class="char-role">${c.role}</span>
+          </div>
+          <div class="char-skill-name">${c.skill}</div>
+          <div class="char-skill-desc">${c.desc}</div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        game.selectCharacter(c.id);
+        game.startRound();
+        closeModal();
+      });
+
+      charGrid.appendChild(card);
+    });
+  };
 
   // Render player cards
   const updatePlayerCards = (stats: GameStats) => {
@@ -34,6 +92,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.style.borderLeft = `4px solid ${p.config.accentColor}`;
 
       const stars = '⭐'.repeat(stats.scores[p.config.id] || 0);
+
+      const skillSecs = Math.ceil(p.skillCooldownTimer / 60);
+      const skillText = p.skillCooldownTimer > 0 ? `⏳ ${skillSecs}s` : `⚡ READY`;
+      const skillColor = p.skillCooldownTimer > 0 ? '#94a3b8' : '#10b981';
 
       card.innerHTML = `
         <div class="player-card-header">
@@ -46,6 +108,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
           ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
           ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
+        </div>
+        <div style="font-size: 0.72rem; color: ${skillColor}; font-weight: 700; margin-top: 2px;">
+          ${skillText}
         </div>
       `;
       hudPlayers.appendChild(card);
@@ -78,7 +143,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       gamepadIndicator.classList.remove('active');
       gamepadStatus.classList.remove('connected');
-      gamepadStatus.innerHTML = `<span>🎮 Gamepad: Not connected (Keyboard: WASD / Arrow Keys + Space)</span>`;
+      gamepadStatus.innerHTML = `<span>🎮 Gamepad: Not connected (Keyboard: WASD / Space / E)</span>`;
     }
   };
 
@@ -132,6 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindTouch('btnLeft', 'ArrowLeft');
   bindTouch('btnRight', 'ArrowRight');
   bindTouch('btnBombTouch', 'Space');
+  bindTouch('btnSkillTouch', 'KeyE');
 
   // Start the game loop & match
   game.startGame();

@@ -116,6 +116,17 @@ html, body {
   transition: all 0.15s ease;
 }
 
+.action-btn.highlight-btn {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  border-color: #60a5fa;
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.4);
+}
+
+.action-btn.highlight-btn:hover {
+  background: #1d4ed8;
+  box-shadow: 0 0 14px rgba(96, 165, 250, 0.6);
+}
+
 .action-btn:hover {
   background: #334155;
   border-color: var(--accent-cyan);
@@ -123,6 +134,168 @@ html, body {
 
 .action-btn:active {
   transform: scale(0.97);
+}
+
+/* Character Selection Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(11, 15, 25, 0.88);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.modal-overlay.hidden {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-card);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 680px;
+  width: 90%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-card);
+  padding-bottom: 12px;
+}
+
+.modal-header h2 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--accent-rose);
+}
+
+.char-select-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.char-card {
+  background: #0f172a;
+  border: 2px solid #334155;
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.char-card:hover {
+  border-color: var(--accent-cyan);
+  background: #1e293b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.3);
+}
+
+.char-card.selected {
+  border-color: var(--accent-gold);
+  background: #1e293b;
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.4);
+}
+
+.char-portrait {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  background: #020617;
+  border: 1px solid #475569;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.char-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.char-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.char-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.char-role {
+  font-size: 0.72rem;
+  background: #1e293b;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.char-skill-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.char-skill-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.skill-touch-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid #60a5fa;
+  color: white;
+  font-size: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.5);
+}
+
+.skill-touch-btn:active {
+  transform: scale(0.92);
+  background: #1d4ed8;
 }
 
 /* Gamepad Status Bar */

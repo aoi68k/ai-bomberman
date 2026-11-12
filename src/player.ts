@@ -32,6 +32,11 @@ export class Player {
   public hasKick: boolean = false;
   public shield: number = 0; // Number of hits shielded
 
+  // Skill state
+  public skillCooldownTimer: number = 0; // Cooldown frames remaining
+  public hasMegaBomb: boolean = false; // Next bomb will be mega bomb
+  public lastPlacedBombId: number | null = null; // For remote detonate
+
   public isAlive: boolean = true;
   public deathTimer: number = 0; // For death spin animation
 
@@ -58,6 +63,9 @@ export class Player {
     this.power = INITIAL_POWER;
     this.hasKick = false;
     this.shield = 0;
+    this.skillCooldownTimer = 0;
+    this.hasMegaBomb = false;
+    this.lastPlacedBombId = null;
     this.isAlive = true;
     this.deathTimer = 0;
     this.facing = this.config.spawnTileY < 6 ? 'down' : 'up';

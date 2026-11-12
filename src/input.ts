@@ -5,6 +5,7 @@ export interface PlayerInput {
   dy: number;       // -1, 0, 1
   bomb: boolean;    // Pressed this frame
   bombDown: boolean;// Held down
+  skill: boolean;   // Skill button pressed this frame
   pause: boolean;   // Pause/Resume pressed
   restart: boolean; // Restart pressed
 }
@@ -131,9 +132,21 @@ export class InputManager {
       bomb = this.keysPressed.has('Space') || this.keysPressed.has('Enter') || this.keysPressed.has('KeyZ') || this.keysPressed.has('KeyJ');
       bombDown = this.keysDown.has('Space') || this.keysDown.has('Enter') || this.keysDown.has('KeyZ') || this.keysDown.has('KeyJ');
 
+      // Skill: KeyE, KeyK, ShiftLeft, ShiftRight, KeyX
+      const skill = this.keysPressed.has('KeyE') || this.keysPressed.has('KeyK') || this.keysPressed.has('ShiftLeft') || this.keysPressed.has('ShiftRight') || this.keysPressed.has('KeyX');
+
       // Pause & Restart
       pause = this.keysPressed.has('KeyP') || this.keysPressed.has('Escape');
       restart = this.keysPressed.has('KeyR');
+
+      if (skill) {
+        // will be returned below
+      }
+    }
+
+    let skill = false;
+    if (playerId === 0) {
+      skill = this.keysPressed.has('KeyE') || this.keysPressed.has('KeyK') || this.keysPressed.has('ShiftLeft') || this.keysPressed.has('ShiftRight') || this.keysPressed.has('KeyX');
     }
 
     // 2. Gamepad Controls (Gamepad Index corresponds to Player ID)
@@ -181,10 +194,9 @@ export class InputManager {
       // Action Buttons for Bomb:
       // Button 0: A (Xbox) / Cross (PS)
       // Button 1: B (Xbox) / Circle (PS)
-      // Button 2: X (Xbox) / Square (PS)
       // Button 5: RB / R1
       // Button 7: RT / R2
-      const bombButtons = [0, 1, 2, 5, 7];
+      const bombButtons = [0, 1, 5, 7];
       let padBombDown = false;
       let padBombJustPressed = false;
 
@@ -204,6 +216,22 @@ export class InputManager {
       if (padBombJustPressed) bomb = true;
       if (padBombDown) bombDown = true;
 
+      // Action Buttons for Skill:
+      // Button 2: X (Xbox) / Square (PS)
+      // Button 3: Y (Xbox) / Triangle (PS)
+      // Button 4: LB / L1
+      // Button 6: LT / L2
+      const skillButtons = [2, 3, 4, 6];
+      for (const btnIndex of skillButtons) {
+        const btn = pad.buttons[btnIndex];
+        const isPressed = btn ? btn.pressed : false;
+        currentButtons[btnIndex] = isPressed;
+
+        if (isPressed && !prevButtons[btnIndex]) {
+          skill = true;
+        }
+      }
+
       // Start / Pause: Button 9 (Start / Options)
       const startBtn = pad.buttons[9]?.pressed || false;
       currentButtons[9] = startBtn;
@@ -221,7 +249,7 @@ export class InputManager {
       this.prevPadButtons.set(pad.index, currentButtons);
     }
 
-    return { dx, dy, bomb, bombDown, pause, restart };
+    return { dx, dy, bomb, bombDown, skill, pause, restart };
   }
 
   /**

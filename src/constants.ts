@@ -51,9 +51,87 @@ export const MAX_POWER = 8;
 export const PLAYER_HITBOX_RADIUS = 16; // Collision circle radius
 export const CORNERING_ASSIST_THRESHOLD = 18; // Max distance to snap/slide around corners
 
+// Character Skills
+export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY';
+
+export interface CharacterInfo {
+  charId: string;
+  name: string;
+  jpName: string;
+  role: string;
+  folder: string;
+  color: string;
+  subColor: string;
+  accentColor: string;
+  skillType: SkillType;
+  skillName: string;
+  skillDesc: string;
+  skillCooldown: number; // in frames (60fps)
+}
+
+export const CHARACTERS: Record<string, CharacterInfo> = {
+  bomber_blue: {
+    charId: 'bomber_blue',
+    name: 'Bomber Blue',
+    jpName: 'ボンバーブルー',
+    role: 'オールラウンダー',
+    folder: 'characters/bomber_blue',
+    color: '#3b82f6',
+    subColor: '#ffffff',
+    accentColor: '#f43f5e',
+    skillType: 'DASH',
+    skillName: 'ダッシュ (Dash)',
+    skillDesc: '向いている方向へ素早く2マス突進！爆風回避に',
+    skillCooldown: 480, // 8 seconds
+  },
+  bomber_black: {
+    charId: 'bomber_black',
+    name: 'Bomber Black',
+    jpName: 'ボンバーブラック',
+    role: 'スピードスター',
+    folder: 'characters/bomber_black',
+    color: '#1e293b',
+    subColor: '#ef4444',
+    accentColor: '#fbbf24',
+    skillType: 'REMOTE_DETONATE',
+    skillName: 'リモコン起爆 (Remote)',
+    skillDesc: '直前に置いた自分のボムを好きなタイミングで遠隔爆破！',
+    skillCooldown: 600, // 10 seconds
+  },
+  bomber_red: {
+    charId: 'bomber_red',
+    name: 'Bomber Red',
+    jpName: 'ボンバーレッド',
+    role: 'パワーファイター',
+    folder: 'characters/bomber_red',
+    color: '#dc2626',
+    subColor: '#ffffff',
+    accentColor: '#f59e0b',
+    skillType: 'MEGA_BOMB',
+    skillName: 'メガボム (Mega Bomb)',
+    skillDesc: '次回置くボムがブロック貫通の超特大メガボムになる！',
+    skillCooldown: 720, // 12 seconds
+  },
+  bomber_green: {
+    charId: 'bomber_green',
+    name: 'Bomber Green',
+    jpName: 'ボンバーグリーン',
+    role: 'ディフェンダー',
+    folder: 'characters/bomber_green',
+    color: '#059669',
+    subColor: '#facc15',
+    accentColor: '#f97316',
+    skillType: 'SHIELD_DEPLOY',
+    skillName: '緊急シールド (Shield)',
+    skillDesc: '3秒間、爆風を防ぐエネルギーシールドを1枚展開！',
+    skillCooldown: 900, // 15 seconds
+  },
+};
+
 // Player appearance & config
 export interface PlayerConfig {
   id: number;
+  charId: string;
   name: string;
   isHuman: boolean;
   color: string;       // Primary suit color
@@ -63,56 +141,70 @@ export interface PlayerConfig {
   spawnTileX: number;
   spawnTileY: number;
   personality: 'balanced' | 'aggressive' | 'collector' | 'cautious';
+  skillType: SkillType;
+  skillCooldown: number;
 }
 
 export const PLAYER_CONFIGS: PlayerConfig[] = [
   {
     id: 0,
+    charId: 'bomber_blue',
     name: 'Player 1',
     isHuman: true,
-    color: '#3b82f6',       // Blue suit
-    subColor: '#ffffff',    // White helmet
-    accentColor: '#f43f5e', // Pink/Red trim
+    color: '#3b82f6',
+    subColor: '#ffffff',
+    accentColor: '#f43f5e',
     nameTag: 'P1 (You)',
     spawnTileX: 1,
     spawnTileY: 1,
     personality: 'balanced',
+    skillType: 'DASH',
+    skillCooldown: 480,
   },
   {
     id: 1,
+    charId: 'bomber_black',
     name: 'COM 1',
     isHuman: false,
-    color: '#1e293b',       // Black suit
-    subColor: '#ef4444',    // Red visor/trim
-    accentColor: '#fbbf24', // Yellow trim
+    color: '#1e293b',
+    subColor: '#ef4444',
+    accentColor: '#fbbf24',
     nameTag: 'COM 1 (Black)',
     spawnTileX: 13,
     spawnTileY: 1,
     personality: 'aggressive',
+    skillType: 'REMOTE_DETONATE',
+    skillCooldown: 600,
   },
   {
     id: 2,
+    charId: 'bomber_red',
     name: 'COM 2',
     isHuman: false,
-    color: '#dc2626',       // Red suit
-    subColor: '#ffffff',    // White helmet
-    accentColor: '#f59e0b', // Amber trim
+    color: '#dc2626',
+    subColor: '#ffffff',
+    accentColor: '#f59e0b',
     nameTag: 'COM 2 (Red)',
     spawnTileX: 1,
     spawnTileY: 11,
     personality: 'collector',
+    skillType: 'MEGA_BOMB',
+    skillCooldown: 720,
   },
   {
     id: 3,
+    charId: 'bomber_green',
     name: 'COM 3',
     isHuman: false,
-    color: '#059669',       // Green suit
-    subColor: '#facc15',    // Yellow helmet
-    accentColor: '#f97316', // Orange trim
+    color: '#059669',
+    subColor: '#facc15',
+    accentColor: '#f97316',
     nameTag: 'COM 3 (Green)',
     spawnTileX: 13,
     spawnTileY: 11,
     personality: 'cautious',
+    skillType: 'SHIELD_DEPLOY',
+    skillCooldown: 900,
   },
 ];
 

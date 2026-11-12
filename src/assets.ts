@@ -10,6 +10,14 @@ export type ImageKey =
   | 'player_1'
   | 'player_2'
   | 'player_3'
+  | 'char_bomber_blue'
+  | 'char_bomber_black'
+  | 'char_bomber_red'
+  | 'char_bomber_green'
+  | 'portrait_bomber_blue'
+  | 'portrait_bomber_black'
+  | 'portrait_bomber_red'
+  | 'portrait_bomber_green'
   | 'item_bomb_up'
   | 'item_fire_up'
   | 'item_speed_up'
@@ -21,38 +29,58 @@ export class AssetManager {
   private loaded: Set<ImageKey> = new Set();
 
   /**
-   * Defines file paths for each image resource inside public/assets/images/
+   * Defines candidate file paths for each image resource
    */
-  private assetManifest: Record<ImageKey, string> = {
-    wall: '/assets/images/wall.png',
-    soft_block: '/assets/images/soft_block.png',
-    floor: '/assets/images/floor.png',
-    bomb: '/assets/images/bomb.png',
-    player_0: '/assets/images/player_0.png', // P1 (You)
-    player_1: '/assets/images/player_1.png', // COM 1 (Black)
-    player_2: '/assets/images/player_2.png', // COM 2 (Red)
-    player_3: '/assets/images/player_3.png', // COM 3 (Green)
-    item_bomb_up: '/assets/images/item_bomb_up.png',
-    item_fire_up: '/assets/images/item_fire_up.png',
-    item_speed_up: '/assets/images/item_speed_up.png',
-    item_kick: '/assets/images/item_kick.png',
-    item_shield: '/assets/images/item_shield.png',
+  private assetManifest: Record<ImageKey, string[]> = {
+    wall: ['/assets/images/environment/wall.png', '/assets/images/wall.png'],
+    soft_block: ['/assets/images/environment/soft_block.png', '/assets/images/soft_block.png'],
+    floor: ['/assets/images/environment/floor.png', '/assets/images/floor.png'],
+    bomb: ['/assets/images/items/bomb.png', '/assets/images/bomb.png'],
+
+    player_0: ['/assets/images/characters/bomber_blue/idle.png', '/assets/images/player_0.png'],
+    player_1: ['/assets/images/characters/bomber_black/idle.png', '/assets/images/player_1.png'],
+    player_2: ['/assets/images/characters/bomber_red/idle.png', '/assets/images/player_2.png'],
+    player_3: ['/assets/images/characters/bomber_green/idle.png', '/assets/images/player_3.png'],
+
+    char_bomber_blue: ['/assets/images/characters/bomber_blue/idle.png', '/assets/images/player_0.png'],
+    char_bomber_black: ['/assets/images/characters/bomber_black/idle.png', '/assets/images/player_1.png'],
+    char_bomber_red: ['/assets/images/characters/bomber_red/idle.png', '/assets/images/player_2.png'],
+    char_bomber_green: ['/assets/images/characters/bomber_green/idle.png', '/assets/images/player_3.png'],
+
+    portrait_bomber_blue: ['/assets/images/characters/bomber_blue/portrait.png', '/assets/images/characters/bomber_blue/idle.png'],
+    portrait_bomber_black: ['/assets/images/characters/bomber_black/portrait.png', '/assets/images/characters/bomber_black/idle.png'],
+    portrait_bomber_red: ['/assets/images/characters/bomber_red/portrait.png', '/assets/images/characters/bomber_red/idle.png'],
+    portrait_bomber_green: ['/assets/images/characters/bomber_green/portrait.png', '/assets/images/characters/bomber_green/idle.png'],
+
+    item_bomb_up: ['/assets/images/items/item_bomb_up.png'],
+    item_fire_up: ['/assets/images/items/item_fire_up.png'],
+    item_speed_up: ['/assets/images/items/item_speed_up.png'],
+    item_kick: ['/assets/images/items/item_kick.png'],
+    item_shield: ['/assets/images/items/item_shield.png'],
   };
 
   public async loadAll(): Promise<void> {
-    const promises = Object.entries(this.assetManifest).map(([key, url]) => {
+    const promises = Object.entries(this.assetManifest).map(([key, urls]) => {
       return new Promise<void>((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          this.images.set(key as ImageKey, img);
-          this.loaded.add(key as ImageKey);
-          resolve();
+        let index = 0;
+        const tryNext = () => {
+          if (index >= urls.length) {
+            resolve();
+            return;
+          }
+          const img = new Image();
+          img.onload = () => {
+            this.images.set(key as ImageKey, img);
+            this.loaded.add(key as ImageKey);
+            resolve();
+          };
+          img.onerror = () => {
+            index++;
+            tryNext();
+          };
+          img.src = urls[index];
         };
-        img.onerror = () => {
-          // File not found or not yet placed by user - silently fallback
-          resolve();
-        };
-        img.src = url;
+        tryNext();
       });
     });
 

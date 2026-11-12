@@ -2,6 +2,7 @@
 
 import {
   PLAYER_CONFIGS,
+  CHARACTERS,
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   PlayerConfig,
@@ -38,6 +39,7 @@ export class GameManager {
   public aiControllers: AIController[] = [];
 
   public state: GameState = 'START_SCREEN';
+  public selectedCharId: string = 'bomber_blue';
   public comCount: number = 3; // Default: 1 Human vs 3 COM = 4 Players
   public round: number = 1;
   public roundTimeSeconds: number = 120; // 2 minutes
@@ -76,15 +78,54 @@ export class GameManager {
     this.players = [];
     this.aiControllers = [];
 
-    // Always create Player 1 (Human)
-    const p1 = new Player(PLAYER_CONFIGS[0]);
+    // Player 1 configuration based on selected character
+    const charData = CHARACTERS[this.selectedCharId] || CHARACTERS['bomber_blue'];
+    const p1Config: PlayerConfig = {
+      ...PLAYER_CONFIGS[0],
+      charId: charData.charId,
+      name: charData.name,
+      color: charData.color,
+      subColor: charData.subColor,
+      accentColor: charData.accentColor,
+      skillType: charData.skillType,
+      skillCooldown: charData.skillCooldown,
+    };
+
+    const p1 = new Player(p1Config);
     this.players.push(p1);
+
+    // Other characters for COMs
+    const allCharKeys = Object.keys(CHARACTERS);
+    const availableComKeys = allCharKeys.filter((k) => k !== this.selectedCharId);
 
     // Create requested number of COM opponents (up to 3)
     for (let i = 1; i <= this.comCount; i++) {
-      const com = new Player(PLAYER_CONFIGS[i]);
+      const comCharKey = availableComKeys[(i - 1) % availableComKeys.length];
+      const comCharData = CHARACTERS[comCharKey];
+      const baseConfig = PLAYER_CONFIGS[i];
+
+      const comConfig: PlayerConfig = {
+        ...baseConfig,
+        charId: comCharData.charId,
+        name: `COM ${i} (${comCharData.jpName})`,
+        color: comCharData.color,
+        subColor: comCharData.subColor,
+        accentColor: comCharData.accentColor,
+        skillType: comCharData.skillType,
+        skillCooldown: comCharData.skillCooldown,
+      };
+
+      const com = new Player(comConfig);
       this.players.push(com);
       this.aiControllers.push(new AIController(com));
+    }
+  }
+
+  public selectCharacter(charId: string) {
+    if (CHARACTERS[charId]) {
+      this.selectedCharId = charId;
+      this.setupPlayers();
+      this.broadcastStats();
     }
   }
 
@@ -266,7 +307,7 @@ export class GameManager {
       }
     }
 
-    // 1. Human (P1) input and movement
+    // 1. Human (P1) input, movement, and skill
     const p1 = this.players[0];
     if (p1 && p1.isAlive) {
       p1.move(p1Input.dx, p1Input.dy, this.map, this.bombManager, (kickedBomb) => {
@@ -275,6 +316,17 @@ export class GameManager {
 
       if (p1Input.bomb) {
         this.tryPlaceBomb(p1);
+      }
+
+      if (p1Input.skill) {
+        this.tryUseSkill(p1);
+      }
+    }
+
+    // Decrement cooldowns for all players
+    for (const p of this.players) {
+      if (p.skillCooldownTimer > 0) {
+        p.skillCooldownTimer--;
       }
     }
 
@@ -381,19 +433,101 @@ export class GameManager {
       .filter((p) => p.isAlive && Math.hypot(p.x - (player.tileX * 48 + 24), p.y - (player.tileY * 48 + 24)) < 36)
       .map((p) => p.config.id);
 
+    // Apply Mega Bomb power boost if active
+    let power = player.power;
+    if (player.hasMegaBomb) {
+      power = Math.min(8, player.power + 4);
+      player.hasMegaBomb = false;
+      this.particles.triggerShake(4, 8);
+    }
+
     const bomb = this.bombManager.placeBomb(
       player.config.id,
       player.tileX,
       player.tileY,
-      player.power,
+      power,
       overlappingPlayers
     );
 
     if (bomb) {
       player.activeBombs++;
+      player.lastPlacedBombId = bomb.id;
       sounds.playBombDrop();
       return true;
     }
+    return false;
+  }
+
+  /**
+   * Executes unique character skill
+   */
+  public tryUseSkill(player: Player): boolean {
+    if (!player.isAlive) return false;
+    if (player.skillCooldownTimer > 0) return false;
+
+    const skillType = player.config.skillType;
+
+    switch (skillType) {
+      case 'DASH': {
+        // Dash 2 tiles in current facing direction if not blocked
+        const dirs = {
+          up: { dx: 0, dy: -2 },
+          down: { dx: 0, dy: 2 },
+          left: { dx: -2, dy: 0 },
+          right: { dx: 2, dy: 0 },
+        };
+        const { dx, dy } = dirs[player.facing];
+        const targetTx = Math.max(1, Math.min(13, player.tileX + dx));
+        const targetTy = Math.max(1, Math.min(11, player.tileY + dy));
+
+        if (this.map.isWalkable(targetTx, targetTy) && !this.bombManager.getBombAt(targetTx, targetTy)) {
+          this.particles.addItemGetParticles(player.x, player.y, player.config.color);
+          player.x = targetTx * 48 + 24;
+          player.y = targetTy * 48 + 24;
+          player.skillCooldownTimer = player.config.skillCooldown;
+          sounds.playKick();
+          this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
+          if (player.config.id === 0) this.input.vibrate(0, 100, 0.4, 0.2);
+          return true;
+        }
+        return false;
+      }
+
+      case 'REMOTE_DETONATE': {
+        // Detonate the last placed bomb belonging to this player immediately
+        const targetBomb = this.bombManager.bombs.find((b) => b.ownerId === player.config.id);
+        if (targetBomb) {
+          targetBomb.timer = 1; // Detonate next tick
+          player.skillCooldownTimer = player.config.skillCooldown;
+          sounds.playHurry();
+          this.particles.addItemGetParticles(targetBomb.pixelX, targetBomb.pixelY, '#ef4444');
+          if (player.config.id === 0) this.input.vibrate(0, 150, 0.6, 0.3);
+          return true;
+        }
+        return false;
+      }
+
+      case 'MEGA_BOMB': {
+        // Empower next bomb
+        player.hasMegaBomb = true;
+        player.skillCooldownTimer = player.config.skillCooldown;
+        sounds.playHurry();
+        this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
+        if (player.config.id === 0) this.input.vibrate(0, 150, 0.5, 0.3);
+        return true;
+      }
+
+      case 'SHIELD_DEPLOY': {
+        // Deploy emergency shield
+        player.shield = Math.min(player.shield + 1, 2);
+        player.skillCooldownTimer = player.config.skillCooldown;
+        sounds.playShieldBreak();
+        this.particles.addItemGetParticles(player.x, player.y, '#38bdf8');
+        if (player.config.id === 0) this.input.vibrate(0, 150, 0.5, 0.3);
+        return true;
+      }
+    }
+
     return false;
   }
 
