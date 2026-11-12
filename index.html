@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>AI Bomber - Bomberman Arcade in Browser</title>
+    <meta name="description" content="A classic Bomberman-like retro arcade game with AI COM opponents and Gamepad API support." />
+  </head>
+  <body>
+    <div class="game-container">
+      <!-- Top Header & Timer -->
+      <header class="top-bar">
+        <div class="logo-area">
+          <span class="logo-icon">💣</span>
+          <h1 class="game-title">AI BOMBER</h1>
+        </div>
+
+        <div id="timerBadge" class="timer-badge">2:00</div>
+
+        <div class="top-actions">
+          <select id="selComCount" class="action-btn" title="COM Opponents count">
+            <option value="1">1 vs 1 COM</option>
+            <option value="2">1 vs 2 COM</option>
+            <option value="3" selected>1 vs 3 COM (4P)</option>
+          </select>
+          <button id="btnBgm" class="action-btn">🎵 BGM: OFF</button>
+          <button id="btnSfx" class="action-btn">🔊 SE: ON</button>
+          <button id="btnReset" class="action-btn">🔄 Retry</button>
+        </div>
+      </header>
+
+      <!-- Gamepad Connection Indicator -->
+      <div class="gamepad-bar">
+        <div id="gamepadStatus" class="gamepad-status">
+          <div id="gamepadIndicator" class="status-indicator"></div>
+          <span>🎮 Checking Gamepad status...</span>
+        </div>
+        <div style="font-size: 0.75rem; color: #64748b;">
+          Standard Gamepad / DualShock / Xbox Supported
+        </div>
+      </div>
+
+      <!-- Main Game Arena Canvas -->
+      <div class="canvas-wrapper">
+        <canvas id="gameCanvas" width="720" height="624"></canvas>
+      </div>
+
+      <!-- HUD: 4 Players Status Cards -->
+      <div id="hudPlayers" class="hud-players">
+        <!-- Dynamically populated by main.ts -->
+      </div>
+
+      <!-- Controls Guide -->
+      <section class="controls-guide">
+        <div class="guide-col">
+          <h4>🎮 ゲームパッド (Gamepad)</h4>
+          <div class="guide-row"><span>移動 (Move)</span> <span><span class="kbd">十字キー</span> / <span class="kbd">左スティック</span></span></div>
+          <div class="guide-row"><span>ボム設置 (Bomb)</span> <span><span class="kbd">A</span> / <span class="kbd">B</span> / <span class="kbd">X</span> / <span class="kbd">RB</span></span></div>
+          <div class="guide-row"><span>ポーズ (Pause)</span> <span><span class="kbd">Start</span></span></div>
+          <div class="guide-row"><span>リトライ (Retry)</span> <span><span class="kbd">Select / Back</span></span></div>
+          <div class="guide-row"><span>振動機能 (Rumble)</span> <span style="color: #10b981;">対応 (爆発・被弾時)</span></div>
+        </div>
+        <div class="guide-col">
+          <h4>⌨️ キーボード (Keyboard)</h4>
+          <div class="guide-row"><span>移動 (Move)</span> <span><span class="kbd">W A S D</span> / <span class="kbd">矢印キー</span></span></div>
+          <div class="guide-row"><span>ボム設置 (Bomb)</span> <span><span class="kbd">Space</span> / <span class="kbd">Enter</span> / <span class="kbd">Z</span></span></div>
+          <div class="guide-row"><span>ポーズ (Pause)</span> <span><span class="kbd">P</span> / <span class="kbd">Esc</span></span></div>
+          <div class="guide-row"><span>リトライ (Retry)</span> <span><span class="kbd">R</span></span></div>
+          <div class="guide-row"><span>アイテム</span> <span>💣ボム+1 🔥火力+1 👟速度 🥊キック 🛡️盾</span></div>
+        </div>
+      </section>
+
+      <!-- Mobile Touch Controls -->
+      <div class="touch-controls">
+        <div class="d-pad">
+          <div></div>
+          <button id="btnUp" class="d-btn">▲</button>
+          <div></div>
+          <button id="btnLeft" class="d-btn">◀</button>
+          <div></div>
+          <button id="btnRight" class="d-btn">▶</button>
+          <div></div>
+          <button id="btnDown" class="d-btn">▼</button>
+          <div></div>
+        </div>
+        <button id="btnBombTouch" class="bomb-touch-btn">💣</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

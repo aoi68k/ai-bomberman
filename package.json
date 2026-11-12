@@ -1,0 +1,15 @@
+{
+  "name": "ai-bomberman",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Bomberman-like retro arcade game playable in modern browsers with Gamepad API and AI COM opponents.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
