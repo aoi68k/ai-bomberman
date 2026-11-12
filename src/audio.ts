@@ -6,7 +6,7 @@ class SoundManager {
   private masterGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private bgmGain: GainNode | null = null;
-  private isMuted: boolean = false;
+  private isSfxMuted: boolean = true; // Default OFF for Sound Effects (SE)
   private bgmPlaying: boolean = false;
   private bgmStep: number = 0;
   private bgmTimer: number | null = null;
@@ -23,7 +23,7 @@ class SoundManager {
       this.sfxGain = this.ctx.createGain();
       this.bgmGain = this.ctx.createGain();
 
-      this.sfxGain.gain.value = 0.7;
+      this.sfxGain.gain.value = this.isSfxMuted ? 0 : 0.7;
       this.bgmGain.gain.value = 0.22;
       this.masterGain.gain.value = 1.0;
 
@@ -41,22 +41,22 @@ class SoundManager {
   }
 
   public toggleMute(): boolean {
-    this.isMuted = !this.isMuted;
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 1.0, this.ctx.currentTime);
+    this.isSfxMuted = !this.isSfxMuted;
+    if (this.sfxGain && this.ctx) {
+      this.sfxGain.gain.setValueAtTime(this.isSfxMuted ? 0 : 0.7, this.ctx.currentTime);
     }
-    return this.isMuted;
+    return this.isSfxMuted;
   }
 
   public isAudioMuted(): boolean {
-    return this.isMuted;
+    return this.isSfxMuted;
   }
 
   // Sound Effects
 
   public playBombDrop() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -78,7 +78,7 @@ class SoundManager {
 
   public playExplosion() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     const dur = 0.55;
@@ -129,7 +129,7 @@ class SoundManager {
 
   public playItemGet() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
     const t = this.ctx.currentTime;
@@ -155,7 +155,7 @@ class SoundManager {
 
   public playKick() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -177,7 +177,7 @@ class SoundManager {
 
   public playShieldBreak() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -199,7 +199,7 @@ class SoundManager {
 
   public playPlayerDeath() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -221,7 +221,7 @@ class SoundManager {
 
   public playWallThud() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -243,7 +243,7 @@ class SoundManager {
 
   public playWin() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     // Fanfare: C4, E4, G4, C5, E5, G5, C6 (Held)
@@ -276,7 +276,7 @@ class SoundManager {
 
   public playHurry() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -319,7 +319,7 @@ class SoundManager {
     ];
 
     const playStep = () => {
-      if (!this.bgmPlaying || !this.ctx || !this.bgmGain || this.isMuted) {
+      if (!this.bgmPlaying || !this.ctx || !this.bgmGain ) {
         if (this.bgmPlaying) {
           this.bgmTimer = window.setTimeout(playStep, stepDuration * 1000);
         }

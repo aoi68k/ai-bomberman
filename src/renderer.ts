@@ -216,36 +216,41 @@ export class GameRenderer {
       ctx.arc(0, 0, 20, 0, Math.PI * 2);
       ctx.fill();
 
-      // Item badge card
-      ctx.fillStyle = '#0f172a';
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(-16, -16, 32, 32, 6);
-      ctx.fill();
-      ctx.stroke();
+      // Render Item Image or fallback to emoji card
+      const itemImg = assets.getImage(`item_${item.type}`);
+      if (itemImg) {
+        ctx.drawImage(itemImg, -18, -18, 36, 36);
+      } else {
+        // Fallback: Item badge card + emoji
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(-16, -16, 32, 32, 6);
+        ctx.fill();
+        ctx.stroke();
 
-      // Render Item Icon
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
 
-      switch (item.type) {
-        case ITEM.BOMB_UP:
-          ctx.fillText('💣', 0, 1);
-          break;
-        case ITEM.FIRE_UP:
-          ctx.fillText('🔥', 0, 1);
-          break;
-        case ITEM.SPEED_UP:
-          ctx.fillText('👟', 0, 1);
-          break;
-        case ITEM.KICK:
-          ctx.fillText('🥊', 0, 1);
-          break;
-        case ITEM.SHIELD:
-          ctx.fillText('🛡️', 0, 1);
-          break;
+        switch (item.type) {
+          case ITEM.BOMB_UP:
+            ctx.fillText('💣', 0, 1);
+            break;
+          case ITEM.FIRE_UP:
+            ctx.fillText('🔥', 0, 1);
+            break;
+          case ITEM.SPEED_UP:
+            ctx.fillText('👟', 0, 1);
+            break;
+          case ITEM.KICK:
+            ctx.fillText('🥊', 0, 1);
+            break;
+          case ITEM.SHIELD:
+            ctx.fillText('🛡️', 0, 1);
+            break;
+        }
       }
 
       ctx.restore();
