@@ -23,9 +23,20 @@ export const ITEM = {
   SPEED_UP: 'speed_up',
   KICK: 'kick',
   SHIELD: 'shield',
+  CHAIN_BOMB: 'chain_bomb',
 } as const;
 
 export type ItemType = typeof ITEM[keyof typeof ITEM];
+
+export interface ItemSettings {
+  shield: boolean;
+  chainBomb: boolean;
+}
+
+export const DEFAULT_ITEM_SETTINGS: ItemSettings = {
+  shield: true,
+  chainBomb: true,
+};
 
 export interface ItemData {
   id: number;
@@ -52,7 +63,7 @@ export const PLAYER_HITBOX_RADIUS = 13.5; // Collision radius (lenient for smoot
 export const CORNERING_ASSIST_THRESHOLD = 24; // Half-tile distance to snap/slide around corners and crossroads
 
 // Character Skills
-export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY' | 'TACKLE' | 'CHEN_SLASH_RUSH' | 'YANGYANG_WIND_SLASH';
+export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY' | 'TACKLE' | 'CHEN_SLASH_RUSH' | 'YANGYANG_WIND_SLASH' | 'CHAIN_BOMB';
 export type UltraType = 'ULTRA_BLITZ_DASH' | 'ULTRA_ALL_DETONATE' | 'ULTRA_NOVA_BOMB' | 'ULTRA_FORTRESS' | 'ULTRA_METEOR_TACKLE' | 'CHEN_TEMPEST_RUSH' | 'YANGYANG_TEMPEST_ZONE';
 
 export interface CharacterStats {

@@ -222,9 +222,13 @@ export class GameRenderer {
       if (itemImg) {
         ctx.drawImage(itemImg, -18, -18, 36, 36);
       } else {
-        // Fallback: Item badge card + emoji
-        ctx.fillStyle = '#0f172a';
-        ctx.strokeStyle = '#facc15';
+        if (item.type === ITEM.CHAIN_BOMB) {
+          ctx.fillStyle = '#1c1917';
+          ctx.strokeStyle = '#ffcf00';
+        } else {
+          ctx.fillStyle = '#0f172a';
+          ctx.strokeStyle = '#facc15';
+        }
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.roundRect(-16, -16, 32, 32, 6);
@@ -250,6 +254,10 @@ export class GameRenderer {
             break;
           case ITEM.SHIELD:
             ctx.fillText('🛡️', 0, 1);
+            break;
+          case ITEM.CHAIN_BOMB:
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText('⚡💣', 0, 1);
             break;
         }
       }

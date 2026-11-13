@@ -7,6 +7,8 @@ import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   PlayerConfig,
+  ItemSettings,
+  DEFAULT_ITEM_SETTINGS,
 } from './constants';
 import { GameMap } from './map';
 import { BombManager, Bomb } from './bomb';
@@ -87,6 +89,10 @@ export class GameManager {
 
   private isRunning: boolean = false;
   private animFrameId: number | null = null;
+
+  // Match Rules & Item Settings
+  public itemSettings: ItemSettings = { ...DEFAULT_ITEM_SETTINGS };
+  private lastBombPressTime: Map<number, number> = new Map();
 
   // Online Multiplayer State
   public isOnlineHost: boolean = false;
@@ -213,8 +219,12 @@ export class GameManager {
     this.startRound();
   }
 
+  public setItemSettings(settings: ItemSettings) {
+    this.itemSettings = { ...settings };
+  }
+
   public startRound() {
-    this.map.reset();
+    this.map.reset(0.65, this.itemSettings);
     this.bombManager.reset();
     this.particles.reset();
     this.isHurryUp = false;
@@ -489,11 +499,20 @@ export class GameManager {
         });
 
         if (hInput.bomb) {
-          this.tryPlaceBomb(hp);
+          const now = performance.now();
+          const lastPress = this.lastBombPressTime.get(hp.config.id) || 0;
+          this.lastBombPressTime.set(hp.config.id, now);
+          if (now - lastPress < 280 && hp.chainBombAmmo > 0) {
+            this.tryUseChainBomb(hp);
+          } else {
+            this.tryPlaceBomb(hp);
+          }
         }
 
         if (hInput.skill) {
-          if (this.tryUseSkill(hp) && hp.isTackling) {
+          if (hp.chainBombAmmo > 0) {
+            this.tryUseChainBomb(hp);
+          } else if (this.tryUseSkill(hp) && hp.isTackling) {
             this.updatePlayerTackle(hp);
           }
         }
@@ -677,15 +696,104 @@ export class GameManager {
   }
 
   /**
+   * Executes Chain Bomb (連爆) skill: places a line of bombs in player's facing direction with cascading chain fuses
+   */
+  public tryUseChainBomb(player: Player): boolean {
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
+    if (player.chainBombAmmo <= 0 && player.config.skillType !== 'CHAIN_BOMB') return false;
+    if (player.config.skillType === 'CHAIN_BOMB' && player.chainBombAmmo <= 0 && player.skillCooldownTimer > 0) return false;
+
+    const dirs = {
+      up: { dx: 0, dy: -1 },
+      down: { dx: 0, dy: 1 },
+      left: { dx: -1, dy: 0 },
+      right: { dx: 1, dy: 0 },
+    };
+    const { dx, dy } = dirs[player.facing];
+
+    const targetTiles: Array<{ x: number; y: number }> = [];
+
+    // Check tile under player first (if empty)
+    if (!this.bombManager.getBombAt(player.tileX, player.tileY)) {
+      targetTiles.push({ x: player.tileX, y: player.tileY });
+    }
+
+    // Extend forward along facing direction up to 4 tiles
+    for (let step = 1; step <= 4; step++) {
+      const tx = player.tileX + dx * step;
+      const ty = player.tileY + dy * step;
+
+      if (tx < 1 || tx >= 14 || ty < 1 || ty >= 12) break;
+      if (!this.map.isWalkable(tx, ty)) break;
+      if (this.bombManager.getBombAt(tx, ty)) break;
+
+      targetTiles.push({ x: tx, y: ty });
+      if (targetTiles.length >= 4) break;
+    }
+
+    if (targetTiles.length === 0) {
+      return false;
+    }
+
+    let placedAny = false;
+    for (let i = 0; i < targetTiles.length; i++) {
+      const { x: tx, y: ty } = targetTiles[i];
+      const overlapping = this.players
+        .filter((p) => p.isAlive && Math.hypot(p.x - (tx * 48 + 24), p.y - (ty * 48 + 24)) < 36)
+        .map((p) => p.config.id);
+
+      const bomb = this.bombManager.placeBomb(player.config.id, tx, ty, player.power, overlapping);
+      if (bomb) {
+        placedAny = true;
+        player.activeBombs++;
+        player.lastPlacedBombId = bomb.id;
+        // Cascading chain fuse: 85 frames (~1.4s) + 10 frames per subsequent bomb in line
+        bomb.timer = 85 + i * 10;
+        this.particles.addItemGetParticles(bomb.pixelX, bomb.pixelY, '#fbbf24');
+      }
+    }
+
+    if (!placedAny) return false;
+
+    sounds.playBombDrop();
+    this.particles.triggerShake(5, 12);
+    if (this.isOnlineHost) {
+      this.emitSound('placeBomb');
+    }
+
+    if (player.chainBombAmmo > 0) {
+      player.chainBombAmmo--;
+    } else if (player.config.skillType === 'CHAIN_BOMB') {
+      player.skillCooldownTimer = player.config.skillCooldown || 600;
+    }
+
+    if (player.config.id === 0) {
+      this.input.vibrate(0, 180, 0.7, 0.4);
+    }
+
+    if (this.isOnlineHost) {
+      this.onHostSnapshot?.(this.exportSnapshot());
+    }
+    this.broadcastStats();
+    return true;
+  }
+
+  /**
    * Executes unique character skill
    */
   public tryUseSkill(player: Player): boolean {
     if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
+    if (player.chainBombAmmo > 0) {
+      return this.tryUseChainBomb(player);
+    }
     if (player.skillCooldownTimer > 0) return false;
 
     const skillType = player.config.skillType;
 
     switch (skillType) {
+      case 'CHAIN_BOMB': {
+        return this.tryUseChainBomb(player);
+      }
       case 'DASH': {
         // Dash 2 tiles in current facing direction if not blocked
         const dirs = {
@@ -1431,6 +1539,7 @@ export class GameManager {
         power: p.power,
         hasKick: p.hasKick,
         shield: p.shield,
+        chainBombAmmo: p.chainBombAmmo,
         skillCooldownTimer: p.skillCooldownTimer,
         ultraGauge: p.ultraGauge,
         hasMegaBomb: p.hasMegaBomb,
@@ -1517,6 +1626,7 @@ export class GameManager {
         p.power = sp.power;
         p.hasKick = sp.hasKick;
         p.shield = sp.shield;
+        p.chainBombAmmo = sp.chainBombAmmo ?? 0;
         p.skillCooldownTimer = sp.skillCooldownTimer;
         p.ultraGauge = sp.ultraGauge;
         p.hasMegaBomb = sp.hasMegaBomb;

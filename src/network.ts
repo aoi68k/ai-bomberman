@@ -2,7 +2,7 @@
 
 import Peer, { DataConnection } from 'peerjs';
 import { PlayerSlotConfig, GameState } from './game';
-import { ItemType } from './constants';
+import { ItemType, ItemSettings, DEFAULT_ITEM_SETTINGS } from './constants';
 
 export interface RemoteInputPayload {
   dx: number;
@@ -29,6 +29,7 @@ export interface SerializedPlayer {
   power: number;
   hasKick: boolean;
   shield: number;
+  chainBombAmmo: number;
   skillCooldownTimer: number;
   ultraGauge: number;
   hasMegaBomb: boolean;
@@ -117,10 +118,11 @@ export type SoundEventName =
   | 'roundOver';
 
 export type NetMessage =
-  | { type: 'WELCOME'; assignedSlot: number; slots: PlayerSlotConfig[]; connectedSlots: number[]; cursors: Record<number, number> }
+  | { type: 'WELCOME'; assignedSlot: number; slots: PlayerSlotConfig[]; connectedSlots: number[]; cursors: Record<number, number>; itemSettings: ItemSettings }
   | { type: 'ROOM_FULL' }
-  | { type: 'LOBBY_SYNC'; slots: PlayerSlotConfig[]; connectedSlots: number[]; cursors: Record<number, number> }
-  | { type: 'START_GAME'; slots: PlayerSlotConfig[] }
+  | { type: 'LOBBY_SYNC'; slots: PlayerSlotConfig[]; connectedSlots: number[]; cursors: Record<number, number>; itemSettings: ItemSettings }
+  | { type: 'START_GAME'; slots: PlayerSlotConfig[]; itemSettings: ItemSettings }
+  | { type: 'ITEM_SETTINGS'; settings: ItemSettings }
   | { type: 'STATE'; snapshot: GameSnapshot }
   | { type: 'SOUND'; event: SoundEventName }
   | { type: 'SELECT_CHAR'; charId: string }
@@ -152,9 +154,10 @@ export class NetworkManager {
   private peerToSlot: Map<string, number> = new Map();
 
   public onLobbyUpdate?: (connectedSlots: number[]) => void;
-  public onGuestWelcome?: (assignedSlot: number, slots: PlayerSlotConfig[], connectedSlots: number[], cursors: Record<number, number>) => void;
-  public onGuestLobbySync?: (slots: PlayerSlotConfig[], connectedSlots: number[], cursors: Record<number, number>) => void;
-  public onGuestStartGame?: (slots: PlayerSlotConfig[]) => void;
+  public onGuestWelcome?: (assignedSlot: number, slots: PlayerSlotConfig[], connectedSlots: number[], cursors: Record<number, number>, itemSettings: ItemSettings) => void;
+  public onGuestLobbySync?: (slots: PlayerSlotConfig[], connectedSlots: number[], cursors: Record<number, number>, itemSettings: ItemSettings) => void;
+  public onGuestStartGame?: (slots: PlayerSlotConfig[], itemSettings: ItemSettings) => void;
+  public onGuestItemSettings?: (settings: ItemSettings) => void;
   public onGuestSnapshot?: (snapshot: GameSnapshot) => void;
   public onSoundEvent?: (event: SoundEventName) => void;
   public onRemoteCharSelect?: (slotIndex: number, charId: string) => void;
@@ -181,6 +184,7 @@ export class NetworkManager {
   public createRoom(
     getSlots: () => PlayerSlotConfig[],
     getCursors: () => Record<number, number>,
+    getItemSettings: () => ItemSettings,
     assignSlotForGuest: (slotIndex: number) => void,
     releaseSlotForGuest: (slotIndex: number) => void
   ): Promise<string> {
@@ -234,6 +238,7 @@ export class NetworkManager {
 
           const updatedSlots = getSlots();
           const updatedCursors = getCursors();
+          const itemSettings = getItemSettings ? getItemSettings() : DEFAULT_ITEM_SETTINGS;
           const connectedSlots = this.getConnectedSlots();
           conn.send({
             type: 'WELCOME',
@@ -241,9 +246,10 @@ export class NetworkManager {
             slots: updatedSlots,
             connectedSlots,
             cursors: updatedCursors,
+            itemSettings,
           } satisfies NetMessage);
 
-          this.broadcastLobbySync(updatedSlots, updatedCursors);
+          this.broadcastLobbySync(updatedSlots, updatedCursors, itemSettings);
           this.onLobbyUpdate?.(connectedSlots);
         });
 
@@ -309,7 +315,13 @@ export class NetworkManager {
             case 'WELCOME':
               this.assignedSlot = msg.assignedSlot;
               this.setStatus(`${msg.assignedSlot + 1}P として参加中 (${this.roomCode})`, true);
-              this.onGuestWelcome?.(msg.assignedSlot, msg.slots, msg.connectedSlots, msg.cursors || {});
+              this.onGuestWelcome?.(
+                msg.assignedSlot,
+                msg.slots,
+                msg.connectedSlots,
+                msg.cursors || {},
+                msg.itemSettings || DEFAULT_ITEM_SETTINGS
+              );
               break;
             case 'ROOM_FULL':
               this.setStatus('ルームが満員です', false);
@@ -317,10 +329,18 @@ export class NetworkManager {
               this.onDisconnect?.('ルームが満員のため参加できませんでした。');
               break;
             case 'LOBBY_SYNC':
-              this.onGuestLobbySync?.(msg.slots, msg.connectedSlots, msg.cursors || {});
+              this.onGuestLobbySync?.(
+                msg.slots,
+                msg.connectedSlots,
+                msg.cursors || {},
+                msg.itemSettings || DEFAULT_ITEM_SETTINGS
+              );
               break;
             case 'START_GAME':
-              this.onGuestStartGame?.(msg.slots);
+              this.onGuestStartGame?.(msg.slots, msg.itemSettings || DEFAULT_ITEM_SETTINGS);
+              break;
+            case 'ITEM_SETTINGS':
+              this.onGuestItemSettings?.(msg.settings);
               break;
             case 'STATE':
               this.onGuestSnapshot?.(msg.snapshot);
@@ -351,20 +371,34 @@ export class NetworkManager {
     });
   }
 
-  public broadcastLobbySync(slots: PlayerSlotConfig[], cursors: Record<number, number>) {
+  public broadcastLobbySync(
+    slots: PlayerSlotConfig[],
+    cursors: Record<number, number>,
+    itemSettings?: ItemSettings
+  ) {
     if (this.role !== 'HOST') return;
     const msg: NetMessage = {
       type: 'LOBBY_SYNC',
       slots,
       connectedSlots: this.getConnectedSlots(),
       cursors,
+      itemSettings: itemSettings || DEFAULT_ITEM_SETTINGS,
     };
     this.broadcast(msg);
   }
 
-  public broadcastStartGame(slots: PlayerSlotConfig[]) {
+  public broadcastStartGame(slots: PlayerSlotConfig[], itemSettings?: ItemSettings) {
     if (this.role !== 'HOST') return;
-    this.broadcast({ type: 'START_GAME', slots });
+    this.broadcast({
+      type: 'START_GAME',
+      slots,
+      itemSettings: itemSettings || DEFAULT_ITEM_SETTINGS,
+    });
+  }
+
+  public broadcastItemSettings(settings: ItemSettings) {
+    if (this.role !== 'HOST') return;
+    this.broadcast({ type: 'ITEM_SETTINGS', settings });
   }
 
   public broadcastSnapshot(snapshot: GameSnapshot) {

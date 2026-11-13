@@ -31,6 +31,7 @@ export class Player {
   public power: number = INITIAL_POWER;
   public hasKick: boolean = false;
   public shield: number = 0; // Number of hits shielded
+  public chainBombAmmo: number = 0; // Number of chain bomb skill uses remaining
 
   // Skill state
   public skillCooldownTimer: number = 0; // Cooldown frames remaining
@@ -82,6 +83,7 @@ export class Player {
     this.power = this.config.stats?.initialPower ?? INITIAL_POWER;
     this.hasKick = false;
     this.shield = 0;
+    this.chainBombAmmo = 0;
     this.skillCooldownTimer = 0;
     this.ultraCooldownTimer = 0;
     this.ultraGauge = 0;
@@ -135,6 +137,9 @@ export class Player {
         break;
       case ITEM.SHIELD:
         this.shield = Math.min(this.shield + 1, 2);
+        break;
+      case ITEM.CHAIN_BOMB:
+        this.chainBombAmmo = Math.min(this.chainBombAmmo + 3, 6);
         break;
     }
   }

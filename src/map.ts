@@ -10,6 +10,8 @@ import {
   ItemType,
   ItemData,
   SPAWN_SAFE_ZONES,
+  ItemSettings,
+  DEFAULT_ITEM_SETTINGS,
 } from './constants';
 
 export class GameMap {
@@ -22,7 +24,7 @@ export class GameMap {
     this.reset();
   }
 
-  public reset(softBlockRatio: number = 0.65) {
+  public reset(softBlockRatio: number = 0.65, itemSettings: ItemSettings = DEFAULT_ITEM_SETTINGS) {
     this.grid = [];
     this.hiddenItems.clear();
     this.activeItems = [];
@@ -61,7 +63,7 @@ export class GameMap {
 
           // Decide item drop inside this soft block
           if (Math.random() < 0.45) {
-            const item = this.randomItemType();
+            const item = this.randomItemType(itemSettings);
             this.hiddenItems.set(`${x},${y}`, item);
           }
         } else {
@@ -72,13 +74,26 @@ export class GameMap {
     }
   }
 
-  private randomItemType(): ItemType {
-    const roll = Math.random();
-    if (roll < 0.28) return ITEM.FIRE_UP;
-    if (roll < 0.54) return ITEM.BOMB_UP;
-    if (roll < 0.76) return ITEM.SPEED_UP;
-    if (roll < 0.90) return ITEM.KICK;
-    return ITEM.SHIELD;
+  private randomItemType(settings: ItemSettings): ItemType {
+    const pool: { type: ItemType; weight: number }[] = [
+      { type: ITEM.FIRE_UP, weight: 26 },
+      { type: ITEM.BOMB_UP, weight: 26 },
+      { type: ITEM.SPEED_UP, weight: 22 },
+      { type: ITEM.KICK, weight: 14 },
+    ];
+    if (settings.shield) {
+      pool.push({ type: ITEM.SHIELD, weight: 10 });
+    }
+    if (settings.chainBomb) {
+      pool.push({ type: ITEM.CHAIN_BOMB, weight: 12 });
+    }
+    const total = pool.reduce((sum, p) => sum + p.weight, 0);
+    let roll = Math.random() * total;
+    for (const item of pool) {
+      if (roll < item.weight) return item.type;
+      roll -= item.weight;
+    }
+    return ITEM.BOMB_UP;
   }
 
   public getTile(x: number, y: number): TileType {

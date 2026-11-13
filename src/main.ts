@@ -5,7 +5,7 @@ import { GameManager, GameStats } from './game';
 import { sounds } from './audio';
 import { GamepadInfo, MenuInput } from './input';
 import { assets } from './assets';
-import { CHARACTERS, PLAYER_SLOT_COLORS, loadCharacters } from './constants';
+import { CHARACTERS, PLAYER_SLOT_COLORS, loadCharacters, ItemSettings, DEFAULT_ITEM_SETTINGS } from './constants';
 import { NetworkManager, SoundEventName } from './network';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -61,6 +61,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   const inviteUrlInput = document.getElementById('inviteUrlInput') as HTMLInputElement;
   const btnCopyInvite = document.getElementById('btnCopyInvite') as HTMLButtonElement;
 
+  const chkItemShield = document.getElementById('chkItemShield') as HTMLInputElement | null;
+  const chkItemChainBomb = document.getElementById('chkItemChainBomb') as HTMLInputElement | null;
+
+  const getItemSettings = (): ItemSettings => ({
+    shield: chkItemShield ? chkItemShield.checked : true,
+    chainBomb: chkItemChainBomb ? chkItemChainBomb.checked : true,
+  });
+
+  const applyItemSettingsToGame = (settings: ItemSettings) => {
+    if (chkItemShield) chkItemShield.checked = settings.shield;
+    if (chkItemChainBomb) chkItemChainBomb.checked = settings.chainBomb;
+    game.setItemSettings(settings);
+  };
+
+  chkItemShield?.addEventListener('change', () => {
+    if (net.role === 'GUEST') return;
+    const settings = getItemSettings();
+    game.setItemSettings(settings);
+    if (net.role === 'HOST') {
+      net.broadcastLobbySync(draftSlots, playerCursors, settings);
+    }
+  });
+
+  chkItemChainBomb?.addEventListener('change', () => {
+    if (net.role === 'GUEST') return;
+    const settings = getItemSettings();
+    game.setItemSettings(settings);
+    if (net.role === 'HOST') {
+      net.broadcastLobbySync(draftSlots, playerCursors, settings);
+    }
+  });
+
   const charList = Object.values(CHARACTERS);
   const draftSlots = game.playerSlots.map((s) => ({ ...s }));
   const slotColors = PLAYER_SLOT_COLORS;
@@ -101,7 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (playerCursors[mySlot] === charIdx) return;
     playerCursors[mySlot] = charIdx;
     if (net.role === 'HOST') {
-      net.broadcastLobbySync(draftSlots, playerCursors);
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings());
     } else if (net.role === 'GUEST') {
       net.sendCursorMove(charIdx);
     }
@@ -120,7 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     draftSlots[idx].control = nextCtrl;
     if (net.role === 'HOST') {
-      net.broadcastLobbySync(draftSlots, playerCursors);
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings());
     }
   };
 
@@ -284,6 +316,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     net.disconnect();
     game.isOnlineHost = false;
     game.isOnlineGuest = false;
+    if (chkItemShield) chkItemShield.disabled = false;
+    if (chkItemChainBomb) chkItemChainBomb.disabled = false;
     draftSlots.forEach((s, idx) => {
       if (s.control === 'REMOTE') {
         s.control = idx === 0 ? '1P' : 'COM';
@@ -305,6 +339,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     onlineSubHint.textContent = '招待URLを相手に送って参加を待ってください';
     game.isOnlineHost = true;
     game.isOnlineGuest = false;
+    if (chkItemShield) chkItemShield.disabled = false;
+    if (chkItemChainBomb) chkItemChainBomb.disabled = false;
 
     // Ensure slot 0 is 1P (Host)
     draftSlots.forEach((s, idx) => {
@@ -317,6 +353,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await net.createRoom(
         () => draftSlots,
         () => playerCursors,
+        () => getItemSettings(),
         (slotIdx) => {
           if (draftSlots[slotIdx]) {
             draftSlots[slotIdx].control = 'REMOTE';
@@ -353,7 +390,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   net.onRemoteCharSelect = (slotIdx, charId) => {
     if (draftSlots[slotIdx]) {
       draftSlots[slotIdx].charId = charId;
-      net.broadcastLobbySync(draftSlots, playerCursors);
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings());
       renderSetupGrid();
     }
   };
@@ -362,27 +399,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     game.setRemoteInput(slotIdx, inp);
   };
 
-  net.onGuestWelcome = (assignedSlot, slots) => {
+  net.onGuestWelcome = (assignedSlot, slots, connectedSlots, cursors, itemSettings) => {
     for (let i = 0; i < 4; i++) {
       if (slots[i]) draftSlots[i] = { ...slots[i] };
     }
     activeSlotIdx = assignedSlot;
+    applyItemSettingsToGame(itemSettings);
+    if (chkItemShield) chkItemShield.disabled = true;
+    if (chkItemChainBomb) chkItemChainBomb.disabled = true;
     onlineSubHint.textContent = `あなたは ${assignedSlot + 1}P です。キャラを選んでホストの開始をお待ちください`;
     renderSetupGrid();
   };
 
-  net.onGuestLobbySync = (slots) => {
+  net.onGuestLobbySync = (slots, connectedSlots, cursors, itemSettings) => {
     for (let i = 0; i < 4; i++) {
       if (slots[i]) draftSlots[i] = { ...slots[i] };
     }
+    applyItemSettingsToGame(itemSettings);
+    if (chkItemShield) chkItemShield.disabled = true;
+    if (chkItemChainBomb) chkItemChainBomb.disabled = true;
     renderSetupGrid();
   };
 
-  net.onGuestStartGame = (slots) => {
+  net.onGuestItemSettings = (itemSettings) => {
+    applyItemSettingsToGame(itemSettings);
+  };
+
+  net.onGuestStartGame = (slots, itemSettings) => {
     titleScreen.classList.add('hidden');
     setupScreen.classList.add('hidden');
     game.isOnlineHost = false;
     game.isOnlineGuest = true;
+    applyItemSettingsToGame(itemSettings);
     game.setPlayerSlots(slots);
     sounds.enableAudio();
     game.startGame();
@@ -477,9 +525,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (net.role === 'GUEST') return;
     titleScreen.classList.add('hidden');
     setupScreen.classList.add('hidden');
+    const settings = getItemSettings();
+    game.setItemSettings(settings);
     game.setPlayerSlots(draftSlots);
     if (net.role === 'HOST') {
-      net.broadcastStartGame(draftSlots);
+      net.broadcastStartGame(draftSlots, settings);
     }
     game.startGame();
     if (net.role === 'HOST') {
@@ -689,6 +739,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
             ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
             ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
+            ${p.chainBombAmmo > 0 ? `<span class="p-stat-item chain-bomb-badge" title="連爆 (Chain Bomb): 残り${p.chainBombAmmo}回">⚡💣${p.chainBombAmmo}</span>` : ''}
           </div>
           <div title="超技ゲージ: ${p.ultraGauge}/10 (ボム設置で+1)" style="width: 100%; height: 3px; background: #020617; border-radius: 2px; overflow: hidden; margin-top: 1px;">
             <div style="width: ${gaugePct}%; height: 100%; background: ${isUltraReady ? '#ef4444' : '#38bdf8'}; box-shadow: ${isUltraReady ? '0 0 6px #ef4444' : 'none'}; transition: width 0.15s ease;"></div>
