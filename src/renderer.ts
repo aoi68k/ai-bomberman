@@ -21,9 +21,22 @@ export class GameRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
 
+  // Offscreen caches to eliminate redundant per-frame drawing, gradients, and CSS filters
+  private floorCache: HTMLCanvasElement | null = null;
+  private cachedHasFloorImg: boolean = false;
+
+  private gridCache: HTMLCanvasElement | null = null;
+  private cachedGridVersion: number = -1;
+  private cachedHasWallImg: boolean = false;
+  private cachedHasSoftImg: boolean = false;
+
+  private itemGlowCache: HTMLCanvasElement | null = null;
+  private explosionCoreCache: HTMLCanvasElement | null = null;
+  private flashingBombCache: HTMLCanvasElement | null = null;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { alpha: false });
     if (!context) throw new Error('Could not get 2D rendering context');
     this.ctx = context;
   }
@@ -39,20 +52,19 @@ export class GameRenderer {
   ) {
     const ctx = this.ctx;
 
-    // Reset and clear
     ctx.save();
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // Apply Screen Shake
     const shake = particles.getShakeOffset();
     if (shake.x !== 0 || shake.y !== 0) {
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       ctx.translate(shake.x, shake.y);
     }
 
-    // 1. Draw Arena Floor
+    // 1. Draw Arena Floor (Single cached drawImage call)
     this.drawFloor(ctx);
 
-    // 2. Draw Soft Blocks and Items on the ground
+    // 2. Draw Soft Blocks, Walls, and Items on the ground
     this.drawItems(ctx, map);
     this.drawGridTiles(ctx, map);
 
@@ -75,42 +87,75 @@ export class GameRenderer {
   }
 
   private drawFloor(ctx: CanvasRenderingContext2D) {
-    const floorImg = assets.getImage('floor');
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const px = x * TILE_SIZE;
-        const py = y * TILE_SIZE;
+    const hasFloorImg = assets.hasImage('floor');
+    if (!this.floorCache || this.cachedHasFloorImg !== hasFloorImg) {
+      this.floorCache = document.createElement('canvas');
+      this.floorCache.width = CANVAS_WIDTH;
+      this.floorCache.height = CANVAS_HEIGHT;
+      const fCtx = this.floorCache.getContext('2d')!;
+      const floorImg = assets.getImage('floor');
 
-        if (floorImg) {
-          ctx.drawImage(floorImg, px, py, TILE_SIZE, TILE_SIZE);
-        } else {
-          const isEven = (x + y) % 2 === 0;
-          ctx.fillStyle = isEven ? '#1e293b' : '#182234'; // High-contrast arcade arena slate
-          ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const px = x * TILE_SIZE;
+          const py = y * TILE_SIZE;
 
-          // Subtle tile inner border
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(px + 0.5, py + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+          if (floorImg) {
+            fCtx.drawImage(floorImg, px, py, TILE_SIZE, TILE_SIZE);
+          } else {
+            const isEven = (x + y) % 2 === 0;
+            fCtx.fillStyle = isEven ? '#1e293b' : '#182234';
+            fCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+
+            fCtx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            fCtx.lineWidth = 1;
+            fCtx.strokeRect(px + 0.5, py + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+          }
         }
       }
+      this.cachedHasFloorImg = hasFloorImg;
     }
+
+    ctx.drawImage(this.floorCache, 0, 0);
   }
 
   private drawGridTiles(ctx: CanvasRenderingContext2D, map: GameMap) {
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const tile = map.getTile(x, y);
-        const px = x * TILE_SIZE;
-        const py = y * TILE_SIZE;
+    const hasWallImg = assets.hasImage('wall');
+    const hasSoftImg = assets.hasImage('soft_block');
 
-        if (tile === TILE.WALL) {
-          this.drawIndestructibleWall(ctx, px, py, x, y);
-        } else if (tile === TILE.SOFT_BLOCK) {
-          this.drawSoftBlock(ctx, px, py);
+    if (
+      !this.gridCache ||
+      this.cachedGridVersion !== map.gridVersion ||
+      this.cachedHasWallImg !== hasWallImg ||
+      this.cachedHasSoftImg !== hasSoftImg
+    ) {
+      if (!this.gridCache) {
+        this.gridCache = document.createElement('canvas');
+        this.gridCache.width = CANVAS_WIDTH;
+        this.gridCache.height = CANVAS_HEIGHT;
+      }
+      const gCtx = this.gridCache.getContext('2d')!;
+      gCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const tile = map.getTile(x, y);
+          const px = x * TILE_SIZE;
+          const py = y * TILE_SIZE;
+
+          if (tile === TILE.WALL) {
+            this.drawIndestructibleWall(gCtx, px, py, x, y);
+          } else if (tile === TILE.SOFT_BLOCK) {
+            this.drawSoftBlock(gCtx, px, py);
+          }
         }
       }
+      this.cachedGridVersion = map.gridVersion;
+      this.cachedHasWallImg = hasWallImg;
+      this.cachedHasSoftImg = hasSoftImg;
     }
+
+    ctx.drawImage(this.gridCache, 0, 0);
   }
 
   private drawIndestructibleWall(ctx: CanvasRenderingContext2D, px: number, py: number, x: number, y: number) {
@@ -196,8 +241,29 @@ export class GameRenderer {
     ctx.fillRect(px + 3, py + 3, TILE_SIZE - 6, 2);
   }
 
+  private getItemGlowCanvas(): HTMLCanvasElement {
+    if (!this.itemGlowCache) {
+      const c = document.createElement('canvas');
+      c.width = 40;
+      c.height = 40;
+      const gCtx = c.getContext('2d')!;
+      const auraGrad = gCtx.createRadialGradient(20, 20, 4, 20, 20, 20);
+      auraGrad.addColorStop(0, 'rgba(250, 204, 21, 0.45)');
+      auraGrad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+      gCtx.fillStyle = auraGrad;
+      gCtx.beginPath();
+      gCtx.arc(20, 20, 20, 0, Math.PI * 2);
+      gCtx.fill();
+      this.itemGlowCache = c;
+    }
+    return this.itemGlowCache;
+  }
+
   private drawItems(ctx: CanvasRenderingContext2D, map: GameMap) {
+    if (map.activeItems.length === 0) return;
     const now = Date.now();
+    const glowCanvas = this.getItemGlowCanvas();
+
     for (const item of map.activeItems) {
       const px = item.tileX * TILE_SIZE + TILE_SIZE / 2;
       const py = item.tileY * TILE_SIZE + TILE_SIZE / 2;
@@ -208,14 +274,8 @@ export class GameRenderer {
       ctx.save();
       ctx.translate(px, py + bob);
 
-      // Glowing aura
-      const auraGrad = ctx.createRadialGradient(0, 0, 4, 0, 0, 20);
-      auraGrad.addColorStop(0, 'rgba(250, 204, 21, 0.45)');
-      auraGrad.addColorStop(1, 'rgba(250, 204, 21, 0)');
-      ctx.fillStyle = auraGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, 20, 0, Math.PI * 2);
-      ctx.fill();
+      // Glowing aura (cached sprite)
+      ctx.drawImage(glowCanvas, -20, -20);
 
       // Render Item Image or fallback to emoji card
       const itemImg = assets.getImage(`item_${item.type}`);
@@ -266,8 +326,27 @@ export class GameRenderer {
     }
   }
 
+  private getFlashingBombCanvas(bombImg: HTMLImageElement): HTMLCanvasElement {
+    if (!this.flashingBombCache) {
+      const c = document.createElement('canvas');
+      c.width = TILE_SIZE;
+      c.height = TILE_SIZE;
+      const bCtx = c.getContext('2d')!;
+      bCtx.drawImage(bombImg, 0, 0, TILE_SIZE, TILE_SIZE);
+      bCtx.globalCompositeOperation = 'source-atop';
+      bCtx.fillStyle = 'rgba(239, 68, 68, 0.55)';
+      bCtx.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+      bCtx.globalCompositeOperation = 'source-over';
+      this.flashingBombCache = c;
+    }
+    return this.flashingBombCache;
+  }
+
   private drawBombs(ctx: CanvasRenderingContext2D, bombs: Bomb[]) {
+    if (bombs.length === 0) return;
     const bombImg = assets.getImage('bomb');
+    const now = Date.now();
+
     for (const bomb of bombs) {
       const px = bomb.pixelX;
       const py = bomb.pixelY;
@@ -280,14 +359,18 @@ export class GameRenderer {
       ctx.translate(px, py);
       ctx.scale(pulseScale, pulseScale);
 
-      // Mega Bomb / Nova Bomb fiery golden-red aura
+      // Mega Bomb / Nova Bomb fiery golden-red aura (no shadowBlur)
       if ((bomb as any).isMega) {
-        const megaPulse = 0.7 + 0.3 * Math.sin(Date.now() / 90);
+        const megaPulse = 0.7 + 0.3 * Math.sin(now / 90);
         ctx.save();
+        ctx.strokeStyle = `rgba(239, 68, 68, ${0.38 * megaPulse})`;
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.stroke();
+
         ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 3;
-        ctx.shadowColor = '#ef4444';
-        ctx.shadowBlur = 12 * megaPulse;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.arc(0, 0, 20, 0, Math.PI * 2);
         ctx.stroke();
@@ -300,33 +383,29 @@ export class GameRenderer {
       ctx.ellipse(0, 14, 15, 6, 0, 0, Math.PI * 2);
       ctx.fill();
 
+      const isFlashing = bomb.timer < 35 && Math.floor(bomb.timer / 4) % 2 === 0;
+
       if (bombImg) {
-        // Red flashing state before detonation
-        if (bomb.timer < 35 && Math.floor(bomb.timer / 4) % 2 === 0) {
-          ctx.filter = 'hue-rotate(300deg) brightness(1.4)';
-        }
-        ctx.drawImage(bombImg, -TILE_SIZE / 2, -TILE_SIZE / 2, TILE_SIZE, TILE_SIZE);
-        ctx.filter = 'none';
+        const sprite = isFlashing ? this.getFlashingBombCanvas(bombImg) : bombImg;
+        ctx.drawImage(sprite, -TILE_SIZE / 2, -TILE_SIZE / 2, TILE_SIZE, TILE_SIZE);
         ctx.restore();
         continue;
       }
 
-      // Bomb body (Sphere with 3D gradient fallback)
-      const grad = ctx.createRadialGradient(-5, -6, 2, 0, 0, 17);
-      if (bomb.timer < 35 && Math.floor(bomb.timer / 4) % 2 === 0) {
-        // Red flashing state before detonation
-        grad.addColorStop(0, '#fca5a5');
-        grad.addColorStop(0.5, '#ef4444');
-        grad.addColorStop(1, '#7f1d1d');
-      } else {
-        grad.addColorStop(0, '#64748b');
-        grad.addColorStop(0.3, '#1e293b');
-        grad.addColorStop(1, '#020617');
-      }
-
-      ctx.fillStyle = grad;
+      // Bomb body (fast concentric circles instead of per-frame createRadialGradient)
+      ctx.fillStyle = isFlashing ? '#7f1d1d' : '#020617';
       ctx.beginPath();
       ctx.arc(0, 0, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = isFlashing ? '#ef4444' : '#1e293b';
+      ctx.beginPath();
+      ctx.arc(-1.5, -1.5, 13, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = isFlashing ? '#fca5a5' : '#64748b';
+      ctx.beginPath();
+      ctx.arc(-5, -6, 4.5, 0, Math.PI * 2);
       ctx.fill();
 
       // Metal fuse collar
@@ -352,7 +431,31 @@ export class GameRenderer {
     }
   }
 
+  private getExplosionCoreCanvas(): HTMLCanvasElement {
+    if (!this.explosionCoreCache) {
+      const c = document.createElement('canvas');
+      c.width = TILE_SIZE;
+      c.height = TILE_SIZE;
+      const eCtx = c.getContext('2d')!;
+      const half = TILE_SIZE / 2;
+      const grad = eCtx.createRadialGradient(half, half, 4, half, half, TILE_SIZE * 0.52);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.3, '#fbbf24');
+      grad.addColorStop(0.7, '#f97316');
+      grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      eCtx.fillStyle = grad;
+      eCtx.beginPath();
+      eCtx.arc(half, half, TILE_SIZE * 0.52, 0, Math.PI * 2);
+      eCtx.fill();
+      this.explosionCoreCache = c;
+    }
+    return this.explosionCoreCache;
+  }
+
   private drawExplosions(ctx: CanvasRenderingContext2D, cells: Array<{ tileX: number; tileY: number; life: number; maxLife: number; direction: string }>) {
+    if (cells.length === 0) return;
+    const coreCanvas = this.getExplosionCoreCanvas();
+
     for (const cell of cells) {
       const px = cell.tileX * TILE_SIZE;
       const py = cell.tileY * TILE_SIZE;
@@ -365,17 +468,8 @@ export class GameRenderer {
       const cx = px + TILE_SIZE / 2;
       const cy = py + TILE_SIZE / 2;
 
-      // Outer orange flame
-      const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, TILE_SIZE * 0.55);
-      grad.addColorStop(0, '#ffffff'); // White hot core
-      grad.addColorStop(0.3, '#fbbf24'); // Yellow
-      grad.addColorStop(0.7, '#f97316'); // Orange
-      grad.addColorStop(1, 'rgba(239, 68, 68, 0)'); // Fading Red
-
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(cx, cy, TILE_SIZE * 0.52, 0, Math.PI * 2);
-      ctx.fill();
+      // Outer orange flame (cached radial gradient sprite)
+      ctx.drawImage(coreCanvas, px, py);
 
       // Directional flame jets
       ctx.fillStyle = '#f59e0b';
@@ -500,42 +594,55 @@ export class GameRenderer {
       ctx.fill();
     }
 
-    // Shield Aura if active
+    // Shield Aura if active (no shadowBlur)
     if (p.shield > 0) {
       const shieldPulse = Math.sin(Date.now() / 150) * 2;
+      const r = 22 + shieldPulse;
+      ctx.strokeStyle = 'rgba(2, 132, 199, 0.35)';
+      ctx.lineWidth = 6.5;
+      ctx.beginPath();
+      ctx.arc(0, -2, r, 0, Math.PI * 2);
+      ctx.stroke();
+
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 2.5;
-      ctx.shadowColor = '#0284c7';
-      ctx.shadowBlur = 8;
       ctx.beginPath();
-      ctx.arc(0, -2, 22 + shieldPulse, 0, Math.PI * 2);
+      ctx.arc(0, -2, r, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.shadowBlur = 0;
     }
 
-    // Mega Bomb Armed Aura if active
+    // Mega Bomb Armed Aura if active (no shadowBlur)
     if (p.isAlive && p.hasMegaBomb) {
       const megaPulse = Math.sin(Date.now() / 110) * 2.5;
+      const r = 24 + megaPulse;
       ctx.save();
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.35)';
+      ctx.lineWidth = 6.5;
+      ctx.beginPath();
+      ctx.arc(0, -2, r, 0, Math.PI * 2);
+      ctx.stroke();
+
       ctx.strokeStyle = '#f59e0b';
       ctx.lineWidth = 2.5;
-      ctx.shadowColor = '#ef4444';
-      ctx.shadowBlur = 10;
       ctx.setLineDash([6, 4]);
       ctx.beginPath();
-      ctx.arc(0, -2, 24 + megaPulse, 0, Math.PI * 2);
+      ctx.arc(0, -2, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
 
-    // Tackle / Slash Rush Aura if active
+    // Tackle / Slash Rush Aura if active (no shadowBlur)
     if (p.isAlive && (p.isTackling || p.slashSequenceTimer > 0)) {
       const isSlash = p.tackleSlashMode !== 'none' || p.slashSequenceTimer > 0;
       ctx.save();
+      ctx.strokeStyle = isSlash ? 'rgba(2, 132, 199, 0.4)' : 'rgba(168, 85, 247, 0.4)';
+      ctx.lineWidth = p.tackleSlashMode === 'ultra_tempest' ? 9 : 7;
+      ctx.beginPath();
+      ctx.arc(0, -2, 22, 0, Math.PI * 2);
+      ctx.stroke();
+
       ctx.strokeStyle = isSlash ? '#38bdf8' : '#c084fc';
-      ctx.lineWidth = p.tackleSlashMode === 'ultra_tempest' ? 4 : 3;
-      ctx.shadowColor = isSlash ? '#0284c7' : '#a855f7';
-      ctx.shadowBlur = p.tackleSlashMode === 'ultra_tempest' ? 16 : 12;
+      ctx.lineWidth = p.tackleSlashMode === 'ultra_tempest' ? 3.5 : 2.5;
       ctx.beginPath();
       ctx.arc(0, -2, 22, 0, Math.PI * 2);
       ctx.stroke();
@@ -668,7 +775,7 @@ export class GameRenderer {
       return;
     }
 
-    // 100% Ready state: bright glowing firefly with trail, aura, and white-hot core
+    // 100% Ready state: bright glowing firefly with trail, aura, and white-hot core (no shadowBlur)
     const pulse = 0.78 + 0.22 * Math.sin(now / 170 + phaseOffset);
 
     // Trailing particles behind the ready firefly
@@ -684,24 +791,26 @@ export class GameRenderer {
     }
 
     ctx.save();
-    // Outer soft glow
-    ctx.shadowColor = readyColor;
-    ctx.shadowBlur = 12 * pulse;
-    ctx.globalAlpha = 0.55 * pulse;
+    // Outer soft halo
+    ctx.globalAlpha = 0.22 * pulse;
     ctx.fillStyle = readyColor;
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 5.8, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, 8.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mid soft glow
+    ctx.globalAlpha = 0.48 * pulse;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 5.4, 0, Math.PI * 2);
     ctx.fill();
 
     // Bright firefly body
     ctx.globalAlpha = 0.98;
-    ctx.fillStyle = readyColor;
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, 3.2, 0, Math.PI * 2);
     ctx.fill();
 
     // Inner white-hot core (clearly distinguishes 100% ready from 99%)
-    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
     ctx.fillStyle = coreColor;
     ctx.beginPath();

@@ -100,6 +100,9 @@ export class GameManager {
   public remoteInputs: Map<number, RemoteInputPayload> = new Map();
   private lastGuestInputSent: RemoteInputPayload = { dx: 0, dy: 0, bomb: false, skill: false, ultra: false };
   private syncTickCounter: number = 0;
+  private lastExportedGridVersion: number = -1;
+  private snapshotCounter: number = 0;
+  private lastRenderedIdleState: string = '';
 
   public onStatsChange?: (stats: GameStats) => void;
   public onMenuInput?: (input: MenuInput) => void;
@@ -369,7 +372,20 @@ export class GameManager {
       if (elapsed >= targetFpsInterval) {
         lastTime = currentTime - (elapsed % targetFpsInterval);
         this.update();
-        this.render();
+
+        if (!document.hidden) {
+          const isIdleOverlayState =
+            this.state === 'TITLE' || this.state === 'SETUP' || this.state === 'PAUSED';
+          if (isIdleOverlayState) {
+            if (this.lastRenderedIdleState !== this.state) {
+              this.lastRenderedIdleState = this.state;
+              this.render();
+            }
+          } else {
+            this.lastRenderedIdleState = '';
+            this.render();
+          }
+        }
       }
     };
 
@@ -609,14 +625,18 @@ export class GameManager {
       }
     }
 
-    // 2. COM Opponents AI update
-    for (const ai of this.aiControllers) {
-      ai.update(
-        this.map,
-        this.bombManager,
-        this.players,
-        (p) => this.tryPlaceBomb(p)
-      );
+    // 2. COM Opponents AI update (share a single dangerMap computation across all COMs)
+    if (this.aiControllers.length > 0) {
+      const sharedDangerMap = AIController.calculateDangerMap(this.map, this.bombManager);
+      for (const ai of this.aiControllers) {
+        ai.update(
+          this.map,
+          this.bombManager,
+          this.players,
+          (p) => this.tryPlaceBomb(p),
+          sharedDangerMap
+        );
+      }
     }
 
     // 3. Update Bombs and Explosions
@@ -1542,11 +1562,17 @@ export class GameManager {
       ctx.save();
       ctx.translate(ws.x, ws.y);
       ctx.rotate(angle);
-      ctx.shadowColor = '#2dd4bf';
-      ctx.shadowBlur = 14;
+      ctx.lineCap = 'round';
+
+      // Soft outer glow stroke (replaces expensive shadowBlur)
+      ctx.strokeStyle = 'rgba(45, 212, 191, 0.35)';
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.arc(0, 0, 26, -Math.PI * 0.45, Math.PI * 0.45);
+      ctx.stroke();
+
       ctx.strokeStyle = '#2dd4bf';
       ctx.lineWidth = 5;
-      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.arc(0, 0, 26, -Math.PI * 0.45, Math.PI * 0.45);
       ctx.stroke();
@@ -1607,10 +1633,15 @@ export class GameManager {
     ctx.font = '900 36px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    const textY = CANVAS_HEIGHT / 2 - (subText ? 14 : 0);
+
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.strokeText(mainText, CANVAS_WIDTH / 2, textY);
+
     ctx.fillStyle = accentColor;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    ctx.shadowBlur = 10;
-    ctx.fillText(mainText, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - (subText ? 14 : 0));
+    ctx.fillText(mainText, CANVAS_WIDTH / 2, textY);
 
     if (subText) {
       ctx.font = 'bold 15px "Segoe UI", sans-serif';
@@ -1622,6 +1653,13 @@ export class GameManager {
   }
 
   public exportSnapshot(): GameSnapshot {
+    this.snapshotCounter++;
+    const includeFullGrid =
+      this.map.gridVersion !== this.lastExportedGridVersion || this.snapshotCounter % 30 === 1;
+    if (includeFullGrid) {
+      this.lastExportedGridVersion = this.map.gridVersion;
+    }
+
     return {
       state: this.state,
       round: this.round,
@@ -1632,14 +1670,14 @@ export class GameManager {
       isHurryUp: this.isHurryUp,
       scores: [...this.scores],
       winnerId: this.roundWinner ? this.roundWinner.config.id : null,
-      grid: this.map.grid.map((row) => [...row]),
+      grid: includeFullGrid ? this.map.grid.map((row) => [...row]) : [],
       activeItems: this.map.activeItems.map((it) => ({ ...it })),
       bombs: this.bombManager.bombs.map((b) => ({
         id: b.id,
         tileX: b.tileX,
         tileY: b.tileY,
-        pixelX: b.pixelX,
-        pixelY: b.pixelY,
+        pixelX: Math.round(b.pixelX * 10) / 10,
+        pixelY: Math.round(b.pixelY * 10) / 10,
         ownerId: b.ownerId,
         power: b.power,
         fuseTimer: (b as any).timer ?? 150,
@@ -1652,8 +1690,8 @@ export class GameManager {
       explosions: this.bombManager.explosions.cells.map((c) => ({ ...c })),
       players: this.players.map((p) => ({
         id: p.config.id,
-        x: p.x,
-        y: p.y,
+        x: Math.round(p.x * 10) / 10,
+        y: Math.round(p.y * 10) / 10,
         speed: p.speed,
         facing: p.facing,
         animFrame: p.animFrame,
@@ -1678,8 +1716,8 @@ export class GameManager {
       })),
       windSlashes: this.activeWindSlashes.map((ws) => ({
         ownerId: ws.ownerId,
-        x: ws.x,
-        y: ws.y,
+        x: Math.round(ws.x * 10) / 10,
+        y: Math.round(ws.y * 10) / 10,
         dx: ws.dx,
         dy: ws.dy,
         tick: ws.tick,
@@ -1727,7 +1765,27 @@ export class GameManager {
       : null;
 
     if (snap.grid && snap.grid.length > 0) {
-      this.map.grid = snap.grid.map((row) => [...row]);
+      let gridDiff = this.map.grid.length !== snap.grid.length;
+      if (!gridDiff) {
+        outer: for (let y = 0; y < snap.grid.length; y++) {
+          const curRow = this.map.grid[y];
+          const newRow = snap.grid[y];
+          if (!curRow || curRow.length !== newRow.length) {
+            gridDiff = true;
+            break;
+          }
+          for (let x = 0; x < newRow.length; x++) {
+            if (curRow[x] !== newRow[x]) {
+              gridDiff = true;
+              break outer;
+            }
+          }
+        }
+      }
+      if (gridDiff) {
+        this.map.grid = snap.grid.map((row) => [...row]);
+        this.map.gridVersion++;
+      }
     }
     if (snap.activeItems) {
       this.map.activeItems = snap.activeItems.map((it) => ({ ...it }));

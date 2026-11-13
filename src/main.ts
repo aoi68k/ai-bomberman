@@ -890,76 +890,135 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   // Render player cards (with face icons, overlaid on bottom wall row)
+  // Cached DOM references to avoid destroying/recreating DOM nodes & <img> tags on every tick/snapshot
+  let lastRosterSignature = '';
+  let lastCardsStatsSignature = '';
+  let lastRenderedTimerSec = -1;
+  let lastHudState: string = '';
+  const cachedPlayerCards: Array<{
+    card: HTMLDivElement;
+    scoreEl: HTMLSpanElement;
+    statsEl: HTMLDivElement;
+    gaugeContainerEl: HTMLDivElement;
+    gaugeBarEl: HTMLDivElement;
+  }> = [];
+
   const updatePlayerCards = (stats: GameStats) => {
-    hudPlayers.innerHTML = '';
-    game.players.forEach((p) => {
-      const card = document.createElement('div');
-      card.className = `player-card ${p.isAlive ? '' : 'dead'}`;
-      card.style.borderLeft = `3px solid ${p.config.accentColor}`;
+    const rosterSig = game.players
+      .map((p) => `${p.config.id}:${p.config.charId}:${p.config.name}:${p.config.accentColor}`)
+      .join('|');
 
-      const portraitImg = assets.getImage(`portrait_${p.config.charId}` as any);
-      const portraitSrc = portraitImg
-        ? portraitImg.src
-        : `assets/images/characters/${p.config.charId}/idle.png`;
+    const statsSig =
+      rosterSig +
+      '#' +
+      game.players
+        .map(
+          (p) =>
+            `${p.isAlive ? 1 : 0},${stats.scores[p.config.id] || 0},${p.maxBombs},${p.power},${p.speed.toFixed(1)},${p.hasKick ? 1 : 0},${p.shield},${p.chainBombAmmo},${p.ultraGauge}`
+        )
+        .join(';');
 
-      const stars = '⭐'.repeat(stats.scores[p.config.id] || 0);
+    if (statsSig === lastCardsStatsSignature) {
+      return;
+    }
+    lastCardsStatsSignature = statsSig;
+
+    // Rebuild card DOM structure only when roster (players / characters / names) changes
+    if (rosterSig !== lastRosterSignature || cachedPlayerCards.length !== game.players.length) {
+      lastRosterSignature = rosterSig;
+      cachedPlayerCards.length = 0;
+      hudPlayers.innerHTML = '';
+
+      for (const p of game.players) {
+        const card = document.createElement('div');
+        card.className = `player-card ${p.isAlive ? '' : 'dead'}`;
+        card.style.borderLeft = `3px solid ${p.config.accentColor}`;
+
+        const portraitImg = assets.getImage(`portrait_${p.config.charId}` as any);
+        const portraitSrc = portraitImg
+          ? portraitImg.src
+          : `assets/images/characters/${p.config.charId}/idle.png`;
+
+        card.innerHTML = `
+          <img class="p-face" src="${portraitSrc}" alt="${p.config.name}" style="border-color: ${p.config.accentColor}" />
+          <div class="p-body">
+            <div class="player-card-header">
+              <span class="p-name" style="color: ${p.config.accentColor}">${p.config.name}</span>
+              <span class="p-score"></span>
+            </div>
+            <div class="p-stats"></div>
+            <div class="p-gauge-wrap" style="width: 100%; height: 3px; background: #020617; border-radius: 2px; overflow: hidden; margin-top: 1px;">
+              <div class="p-gauge-bar" style="width: 0%; height: 100%; background: #38bdf8; transition: width 0.15s ease;"></div>
+            </div>
+          </div>
+        `;
+        hudPlayers.appendChild(card);
+        cachedPlayerCards.push({
+          card,
+          scoreEl: card.querySelector('.p-score') as HTMLSpanElement,
+          statsEl: card.querySelector('.p-stats') as HTMLDivElement,
+          gaugeContainerEl: card.querySelector('.p-gauge-wrap') as HTMLDivElement,
+          gaugeBarEl: card.querySelector('.p-gauge-bar') as HTMLDivElement,
+        });
+      }
+    }
+
+    // Update dynamic values in-place without touching <img> or rebuilding card wrapper
+    game.players.forEach((p, idx) => {
+      const refs = cachedPlayerCards[idx];
+      if (!refs) return;
+
+      refs.card.classList.toggle('dead', !p.isAlive);
+      refs.scoreEl.textContent = '⭐'.repeat(stats.scores[p.config.id] || 0);
+      refs.statsEl.innerHTML = `
+        <span class="p-stat-item" title="Bombs">💣${p.maxBombs}</span>
+        <span class="p-stat-item" title="Fire Power">🔥${p.power}</span>
+        <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
+        ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
+        ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
+        ${p.chainBombAmmo > 0 ? `<span class="p-stat-item chain-bomb-badge" title="連爆 (Chain Bomb): 残り${p.chainBombAmmo}回">⚡💣${p.chainBombAmmo}</span>` : ''}
+      `;
+
       const gaugePct = Math.min(100, (p.ultraGauge / 10) * 100);
       const isUltraReady = p.ultraGauge >= 10;
-
-      card.innerHTML = `
-        <img class="p-face" src="${portraitSrc}" alt="${p.config.name}" style="border-color: ${p.config.accentColor}" />
-        <div class="p-body">
-          <div class="player-card-header">
-            <span class="p-name" style="color: ${p.config.accentColor}">${p.config.name}</span>
-            <span class="p-score">${stars}</span>
-          </div>
-          <div class="p-stats">
-            <span class="p-stat-item" title="Bombs">💣${p.maxBombs}</span>
-            <span class="p-stat-item" title="Fire Power">🔥${p.power}</span>
-            <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
-            ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
-            ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
-            ${p.chainBombAmmo > 0 ? `<span class="p-stat-item chain-bomb-badge" title="連爆 (Chain Bomb): 残り${p.chainBombAmmo}回">⚡💣${p.chainBombAmmo}</span>` : ''}
-          </div>
-          <div title="超技ゲージ: ${p.ultraGauge}/10 (ボム設置で+1)" style="width: 100%; height: 3px; background: #020617; border-radius: 2px; overflow: hidden; margin-top: 1px;">
-            <div style="width: ${gaugePct}%; height: 100%; background: ${isUltraReady ? '#ef4444' : '#38bdf8'}; box-shadow: ${isUltraReady ? '0 0 6px #ef4444' : 'none'}; transition: width 0.15s ease;"></div>
-          </div>
-        </div>
-      `;
-      hudPlayers.appendChild(card);
+      refs.gaugeContainerEl.title = `超技ゲージ: ${p.ultraGauge}/10 (ボム設置で+1)`;
+      refs.gaugeBarEl.style.width = `${gaugePct}%`;
+      refs.gaugeBarEl.style.background = isUltraReady ? '#ef4444' : '#38bdf8';
+      refs.gaugeBarEl.style.boxShadow = isUltraReady ? '0 0 6px #ef4444' : 'none';
     });
   };
 
   // Stats Callback
   game.onStatsChange = (stats: GameStats) => {
-    const mins = Math.floor(stats.timeRemaining / 60);
-    const secs = stats.timeRemaining % 60;
-    timerBadge.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-
-    if (stats.timeRemaining <= 45 && stats.timeRemaining > 0) {
-      timerBadge.classList.add('hurry');
-    } else {
-      timerBadge.classList.remove('hurry');
+    if (stats.timeRemaining !== lastRenderedTimerSec) {
+      lastRenderedTimerSec = stats.timeRemaining;
+      const mins = Math.floor(stats.timeRemaining / 60);
+      const secs = stats.timeRemaining % 60;
+      timerBadge.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      timerBadge.classList.toggle('hurry', stats.timeRemaining <= 45 && stats.timeRemaining > 0);
     }
 
-    const showInGameHud =
-      stats.state === 'COUNTDOWN' ||
-      stats.state === 'PLAYING' ||
-      stats.state === 'ROUND_OVER' ||
-      stats.state === 'PAUSED';
-    timerBadge.classList.toggle('hidden', !showInGameHud);
-    hudPlayers.classList.toggle('hidden', !showInGameHud);
-    btnPauseOverlay.classList.toggle('hidden', !showInGameHud);
+    if (stats.state !== lastHudState) {
+      lastHudState = stats.state;
+      const showInGameHud =
+        stats.state === 'COUNTDOWN' ||
+        stats.state === 'PLAYING' ||
+        stats.state === 'ROUND_OVER' ||
+        stats.state === 'PAUSED';
+      timerBadge.classList.toggle('hidden', !showInGameHud);
+      hudPlayers.classList.toggle('hidden', !showInGameHud);
+      btnPauseOverlay.classList.toggle('hidden', !showInGameHud);
 
-    const isPaused = stats.state === 'PAUSED';
-    const wasHidden = pauseScreen.classList.contains('hidden');
-    pauseScreen.classList.toggle('hidden', !isPaused);
-    if (isPaused) {
-      if (wasHidden) {
-        pauseFocus = 0;
-        showPadFocus = game.input.getConnectedGamepads().some((p) => p.connected);
+      const isPaused = stats.state === 'PAUSED';
+      const wasHidden = pauseScreen.classList.contains('hidden');
+      pauseScreen.classList.toggle('hidden', !isPaused);
+      if (isPaused) {
+        if (wasHidden) {
+          pauseFocus = 0;
+          showPadFocus = game.input.getConnectedGamepads().some((p) => p.connected);
+        }
+        renderPauseFocus();
       }
-      renderPauseFocus();
     }
 
     updatePlayerCards(stats);

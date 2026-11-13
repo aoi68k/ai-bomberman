@@ -6,10 +6,14 @@ class SoundManager {
   private masterGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private bgmGain: GainNode | null = null;
+  private explosionNoiseBuffer: AudioBuffer | null = null;
   private isSfxMuted: boolean = false; // Default ON for Sound Effects (SE)
   private bgmPlaying: boolean = false;
   private bgmStep: number = 0;
   private bgmTimer: number | null = null;
+  private lastExplosionAt: number = 0;
+  private lastKickAt: number = 0;
+  private lastItemAt: number = 0;
 
   constructor() {
     // Lazily initialize upon first user gesture
@@ -30,6 +34,15 @@ class SoundManager {
       this.sfxGain.connect(this.masterGain);
       this.bgmGain.connect(this.masterGain);
       this.masterGain.connect(this.ctx.destination);
+
+      // Pre-generate white noise buffer once for explosions
+      const dur = 0.55;
+      const bufferSize = Math.floor(this.ctx.sampleRate * dur);
+      this.explosionNoiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const output = this.explosionNoiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
@@ -78,21 +91,18 @@ class SoundManager {
 
   public playExplosion() {
     this.initContext();
-    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
+    if (!this.ctx || !this.sfxGain || !this.explosionNoiseBuffer || this.isSfxMuted) return;
+
+    const now = performance.now();
+    if (now - this.lastExplosionAt < 28) return;
+    this.lastExplosionAt = now;
 
     const t = this.ctx.currentTime;
     const dur = 0.55;
 
-    // 1. Noise blast
-    const bufferSize = Math.floor(this.ctx.sampleRate * dur);
-    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
-
+    // 1. Noise blast (reusing pre-generated buffer)
     const whiteNoise = this.ctx.createBufferSource();
-    whiteNoise.buffer = noiseBuffer;
+    whiteNoise.buffer = this.explosionNoiseBuffer;
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -131,6 +141,10 @@ class SoundManager {
     this.initContext();
     if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
 
+    const now = performance.now();
+    if (now - this.lastItemAt < 25) return;
+    this.lastItemAt = now;
+
     const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
     const t = this.ctx.currentTime;
 
@@ -156,6 +170,10 @@ class SoundManager {
   public playKick() {
     this.initContext();
     if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
+
+    const now = performance.now();
+    if (now - this.lastKickAt < 25) return;
+    this.lastKickAt = now;
 
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();

@@ -10,6 +10,14 @@ interface TileCoord {
   y: number;
 }
 
+const GRID_CELLS = ROWS * COLS;
+const DIRS = [
+  { dx: 0, dy: -1 },
+  { dx: 0, dy: 1 },
+  { dx: -1, dy: 0 },
+  { dx: 1, dy: 0 },
+];
+
 export class AIController {
   private player: Player;
   private currentPath: TileCoord[] = [];
@@ -17,6 +25,11 @@ export class AIController {
   private lastTileX: number = -1;
   private lastTileY: number = -1;
   private stuckCounter: number = 0;
+
+  // Reusable typed buffers for zero-allocation BFS
+  private bfsVisited = new Uint8Array(GRID_CELLS);
+  private bfsParent = new Int16Array(GRID_CELLS);
+  private bfsQueue = new Int16Array(GRID_CELLS);
 
   constructor(player: Player) {
     this.player = player;
@@ -46,15 +59,7 @@ export class AIController {
       // Bomb tile itself is dangerous
       danger[by][bx] = danger[by][bx] === 0 ? timeLeft : Math.min(danger[by][bx], timeLeft);
 
-      // Raycast in 4 directions
-      const dirs = [
-        { dx: 0, dy: -1 },
-        { dx: 0, dy: 1 },
-        { dx: -1, dy: 0 },
-        { dx: 1, dy: 0 },
-      ];
-
-      for (const { dx, dy } of dirs) {
+      for (const { dx, dy } of DIRS) {
         for (let dist = 1; dist <= bomb.power; dist++) {
           const tx = bx + dx * dist;
           const ty = by + dy * dist;
@@ -81,7 +86,8 @@ export class AIController {
     map: GameMap,
     bombManager: BombManager,
     allPlayers: Player[],
-    requestPlaceBomb: (player: Player) => boolean
+    requestPlaceBomb: (player: Player) => boolean,
+    sharedDangerMap?: number[][]
   ) {
     if (!this.player.isAlive) return;
 
@@ -105,7 +111,7 @@ export class AIController {
       this.stuckCounter = 0;
     }
 
-    const dangerMap = AIController.calculateDangerMap(map, bombManager);
+    const dangerMap = sharedDangerMap ?? AIController.calculateDangerMap(map, bombManager);
     const isCurrentTileDangerous = dangerMap[myTy][myTx] > 0;
 
     // 1. EMERGENCY EVACUATION (Highest Priority)
@@ -139,7 +145,7 @@ export class AIController {
       // Strategy B: Attack / Bomb nearby soft block or enemy
       if (!targetGoal) {
         // Check if we are adjacent to a soft block or enemy to place a bomb
-        const canSafelyBomb = this.canPlaceBombSafely(myTx, myTy, map, bombManager);
+        const canSafelyBomb = this.canPlaceBombSafely(myTx, myTy, map, bombManager, dangerMap);
 
         if (canSafelyBomb && this.player.activeBombs < this.player.maxBombs) {
           const adjacentSoftBlock = this.hasAdjacentSoftBlock(myTx, myTy, map);
@@ -219,23 +225,19 @@ export class AIController {
    * Suicide Prevention: Simulates placing a bomb at (bx, by) and verifies
    * whether the AI can reach at least one 100% safe tile before fuse runs out.
    */
-  private canPlaceBombSafely(bx: number, by: number, map: GameMap, bombManager: BombManager): boolean {
-    // Virtual danger simulation
-    const simulatedDanger: number[][] = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-
-    // Copy existing danger
-    const currentDanger = AIController.calculateDangerMap(map, bombManager);
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        simulatedDanger[y][x] = currentDanger[y][x];
-      }
-    }
+  private canPlaceBombSafely(
+    bx: number,
+    by: number,
+    map: GameMap,
+    bombManager: BombManager,
+    currentDanger: number[][]
+  ): boolean {
+    const simulatedDanger: number[][] = Array.from({ length: ROWS }, (_, y) => [...currentDanger[y]]);
 
     // Add candidate bomb's blast
     const power = this.player.power;
     simulatedDanger[by][bx] = 150;
-    const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
-    for (const { dx, dy } of dirs) {
+    for (const { dx, dy } of DIRS) {
       for (let dist = 1; dist <= power; dist++) {
         const tx = bx + dx * dist;
         const ty = by + dy * dist;
@@ -261,56 +263,54 @@ export class AIController {
     bombManager: BombManager,
     dangerMap: number[][]
   ): TileCoord[] {
-    const queue: TileCoord[] = [{ x: startX, y: startY }];
-    const visited = new Set<string>();
-    const parent = new Map<string, TileCoord | null>();
+    this.bfsVisited.fill(0);
+    this.bfsParent.fill(-1);
 
-    const startKey = `${startX},${startY}`;
-    visited.add(startKey);
-    parent.set(startKey, null);
+    const startIdx = startY * COLS + startX;
+    this.bfsVisited[startIdx] = 1;
+    let head = 0;
+    let tail = 0;
+    this.bfsQueue[tail++] = startIdx;
 
-    let foundSafe: TileCoord | null = null;
+    let foundIdx = -1;
 
-    const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+    while (head < tail) {
+      const curIdx = this.bfsQueue[head++];
+      const curX = curIdx % COLS;
+      const curY = (curIdx - curX) / COLS;
 
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
-
-      // Found safe spot!
-      if (dangerMap[cur.y][cur.x] === 0) {
-        foundSafe = cur;
+      if (dangerMap[curY][curX] === 0) {
+        foundIdx = curIdx;
         break;
       }
 
-      for (const { dx, dy } of dirs) {
-        const nx = cur.x + dx;
-        const ny = cur.y + dy;
-        const key = `${nx},${ny}`;
-
+      for (const { dx, dy } of DIRS) {
+        const nx = curX + dx;
+        const ny = curY + dy;
         if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
-        if (visited.has(key)) continue;
 
-        // Must be walkable floor
+        const nIdx = ny * COLS + nx;
+        if (this.bfsVisited[nIdx]) continue;
         if (!map.isWalkable(nx, ny)) continue;
-
-        // Cannot walk onto other bombs
         if (bombManager.getBombAt(nx, ny) && (nx !== startX || ny !== startY)) continue;
 
-        visited.add(key);
-        parent.set(key, cur);
-        queue.push({ x: nx, y: ny });
+        this.bfsVisited[nIdx] = 1;
+        this.bfsParent[nIdx] = curIdx;
+        this.bfsQueue[tail++] = nIdx;
       }
     }
 
-    if (!foundSafe) return [];
+    if (foundIdx === -1) return [];
 
-    // Reconstruct path
     const path: TileCoord[] = [];
-    let curr: TileCoord | null = foundSafe;
-    while (curr !== null) {
-      path.unshift(curr);
-      curr = parent.get(`${curr.x},${curr.y}`) || null;
+    let curr = foundIdx;
+    while (curr !== -1) {
+      const cx = curr % COLS;
+      const cy = (curr - cx) / COLS;
+      path.push({ x: cx, y: cy });
+      curr = this.bfsParent[curr];
     }
+    path.reverse();
     return path;
   }
 
@@ -328,54 +328,56 @@ export class AIController {
   ): TileCoord[] {
     if (sx === gx && sy === gy) return [{ x: sx, y: sy }];
 
-    const queue: TileCoord[] = [{ x: sx, y: sy }];
-    const visited = new Set<string>();
-    const parent = new Map<string, TileCoord | null>();
+    this.bfsVisited.fill(0);
+    this.bfsParent.fill(-1);
 
-    const startKey = `${sx},${sy}`;
-    visited.add(startKey);
-    parent.set(startKey, null);
+    const startIdx = sy * COLS + sx;
+    const goalIdx = gy * COLS + gx;
+    this.bfsVisited[startIdx] = 1;
+    let head = 0;
+    let tail = 0;
+    this.bfsQueue[tail++] = startIdx;
 
     let reached = false;
-    const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
 
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
-
-      if (cur.x === gx && cur.y === gy) {
+    while (head < tail) {
+      const curIdx = this.bfsQueue[head++];
+      if (curIdx === goalIdx) {
         reached = true;
         break;
       }
 
-      for (const { dx, dy } of dirs) {
-        const nx = cur.x + dx;
-        const ny = cur.y + dy;
-        const key = `${nx},${ny}`;
+      const curX = curIdx % COLS;
+      const curY = (curIdx - curX) / COLS;
 
+      for (const { dx, dy } of DIRS) {
+        const nx = curX + dx;
+        const ny = curY + dy;
         if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
-        if (visited.has(key)) continue;
 
-        // Skip dangerous tiles in general pathfinding
+        const nIdx = ny * COLS + nx;
+        if (this.bfsVisited[nIdx]) continue;
         if (dangerMap[ny][nx] > 0) continue;
-
-        // Walkable check (destination might be item tile which is walkable)
         if (!map.isWalkable(nx, ny)) continue;
         if (bombManager.getBombAt(nx, ny)) continue;
 
-        visited.add(key);
-        parent.set(key, cur);
-        queue.push({ x: nx, y: ny });
+        this.bfsVisited[nIdx] = 1;
+        this.bfsParent[nIdx] = curIdx;
+        this.bfsQueue[tail++] = nIdx;
       }
     }
 
     if (!reached) return [];
 
     const path: TileCoord[] = [];
-    let curr: TileCoord | null = { x: gx, y: gy };
-    while (curr !== null) {
-      path.unshift(curr);
-      curr = parent.get(`${curr.x},${curr.y}`) || null;
+    let curr = goalIdx;
+    while (curr !== -1) {
+      const cx = curr % COLS;
+      const cy = (curr - cx) / COLS;
+      path.push({ x: cx, y: cy });
+      curr = this.bfsParent[curr];
     }
+    path.reverse();
     return path;
   }
 

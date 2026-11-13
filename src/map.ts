@@ -16,6 +16,7 @@ import {
 
 export class GameMap {
   public grid: TileType[][] = [];
+  public gridVersion: number = 0;
   public hiddenItems: Map<string, ItemType> = new Map(); // key: "x,y"
   public activeItems: ItemData[] = [];
   private nextItemId: number = 1;
@@ -26,6 +27,7 @@ export class GameMap {
 
   public reset(softBlockRatio: number = 0.65, itemSettings: ItemSettings = DEFAULT_ITEM_SETTINGS) {
     this.grid = [];
+    this.gridVersion++;
     this.hiddenItems.clear();
     this.activeItems = [];
     this.nextItemId = 1;
@@ -105,7 +107,10 @@ export class GameMap {
 
   public setTile(x: number, y: number, tile: TileType) {
     if (x >= 0 && x < COLS && y >= 0 && y < ROWS) {
-      this.grid[y][x] = tile;
+      if (this.grid[y][x] !== tile) {
+        this.grid[y][x] = tile;
+        this.gridVersion++;
+      }
     }
   }
 

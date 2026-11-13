@@ -28,6 +28,9 @@ export interface SlashEffect {
 }
 
 export class ParticleManager {
+  private static readonly MAX_PARTICLES = 160;
+  private static readonly MAX_SLASHES = 24;
+
   public particles: Particle[] = [];
   public slashes: SlashEffect[] = [];
   public shakeDuration: number = 0;
@@ -41,6 +44,15 @@ export class ParticleManager {
     this.shakeDuration = 0;
     this.shakeIntensity = 0;
     this.pendingFxEvents = [];
+  }
+
+  private pushParticle(p: Particle) {
+    if (this.particles.length >= ParticleManager.MAX_PARTICLES) {
+      // Overwrite oldest particle to avoid allocation/GC spike
+      this.particles[Math.floor(Math.random() * 24)] = p;
+      return;
+    }
+    this.particles.push(p);
   }
 
   private pushFxEvent(ev: SerializedFxEvent) {
@@ -106,7 +118,7 @@ export class ParticleManager {
       const angle = Math.random() * Math.PI * 2;
       const speed = 1.5 + Math.random() * 4.5;
       const life = 18 + Math.floor(Math.random() * 16);
-      this.particles.push({
+      this.pushParticle({
         x: px + (Math.random() - 0.5) * 16,
         y: py + (Math.random() - 0.5) * 16,
         vx: Math.cos(angle) * speed,
@@ -129,7 +141,7 @@ export class ParticleManager {
       const angle = Math.random() * Math.PI * 2;
       const speed = 1.0 + Math.random() * 3.5;
       const life = 20 + Math.floor(Math.random() * 15);
-      this.particles.push({
+      this.pushParticle({
         x: px + (Math.random() - 0.5) * 20,
         y: py + (Math.random() - 0.5) * 20,
         vx: Math.cos(angle) * speed,
@@ -147,11 +159,11 @@ export class ParticleManager {
 
   public addItemGetParticles(px: number, py: number, color: string = '#facc15') {
     this.pushFxEvent({ kind: 'itemGet', x: Math.round(px), y: Math.round(py), color });
-    for (let i = 0; i < 14; i++) {
-      const angle = (i / 14) * Math.PI * 2 + Math.random() * 0.2;
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.2;
       const speed = 2.0 + Math.random() * 2.5;
-      const life = 24 + Math.floor(Math.random() * 10);
-      this.particles.push({
+      const life = 22 + Math.floor(Math.random() * 10);
+      this.pushParticle({
         x: px,
         y: py,
         vx: Math.cos(angle) * speed,
@@ -185,6 +197,9 @@ export class ParticleManager {
       flip,
     });
     const life = 12;
+    if (this.slashes.length >= ParticleManager.MAX_SLASHES) {
+      this.slashes.shift();
+    }
     this.slashes.push({
       x: px,
       y: py,
@@ -197,11 +212,11 @@ export class ParticleManager {
     });
 
     // Accompanying sword sparks
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       const a = angle + (Math.random() - 0.5) * 1.4;
       const spd = 2.0 + Math.random() * 3.5;
       const pLife = 10 + Math.floor(Math.random() * 8);
-      this.particles.push({
+      this.pushParticle({
         x: px + Math.cos(a) * (radius * 0.4),
         y: py + Math.sin(a) * (radius * 0.4),
         vx: Math.cos(a) * spd,
@@ -225,7 +240,7 @@ export class ParticleManager {
       }
     }
 
-    // Particles update
+    // Particles update with O(1) swap-and-pop removal
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.x += p.vx;
@@ -237,15 +252,23 @@ export class ParticleManager {
       p.alpha = Math.max(0, p.life / p.maxLife);
 
       if (p.life <= 0) {
-        this.particles.splice(i, 1);
+        const lastIdx = this.particles.length - 1;
+        if (i !== lastIdx) {
+          this.particles[i] = this.particles[lastIdx];
+        }
+        this.particles.pop();
       }
     }
 
-    // Slashes update
+    // Slashes update with O(1) swap-and-pop removal
     for (let i = this.slashes.length - 1; i >= 0; i--) {
       this.slashes[i].life--;
       if (this.slashes[i].life <= 0) {
-        this.slashes.splice(i, 1);
+        const lastIdx = this.slashes.length - 1;
+        if (i !== lastIdx) {
+          this.slashes[i] = this.slashes[lastIdx];
+        }
+        this.slashes.pop();
       }
     }
   }
@@ -263,6 +286,8 @@ export class ParticleManager {
   }
 
   public render(ctx: CanvasRenderingContext2D) {
+    if (this.particles.length === 0 && this.slashes.length === 0) return;
+
     ctx.save();
     for (const p of this.particles) {
       ctx.globalAlpha = p.alpha;
@@ -281,7 +306,7 @@ export class ParticleManager {
       }
     }
 
-    // Render sharp crescent slash arcs
+    // Render sharp crescent slash arcs (using layered strokes instead of shadowBlur)
     for (const s of this.slashes) {
       const progress = 1 - s.life / s.maxLife;
       const alpha = Math.max(0, s.life / s.maxLife);
@@ -290,14 +315,19 @@ export class ParticleManager {
       ctx.rotate(s.angle);
       if (s.flip) ctx.scale(1, -1);
 
-      ctx.globalAlpha = alpha;
-      ctx.shadowColor = s.color;
-      ctx.shadowBlur = 12;
-
-      // Outer glowing arc
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth = 7 * (1 - progress * 0.5);
       ctx.lineCap = 'round';
+      ctx.strokeStyle = s.color;
+
+      // Soft outer halo stroke (replaces expensive shadowBlur)
+      ctx.globalAlpha = alpha * 0.32;
+      ctx.lineWidth = 13 * (1 - progress * 0.5);
+      ctx.beginPath();
+      ctx.arc(0, 0, s.radius, -Math.PI * 0.42, Math.PI * 0.42);
+      ctx.stroke();
+
+      // Main blade arc
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 6.5 * (1 - progress * 0.5);
       ctx.beginPath();
       ctx.arc(0, 0, s.radius, -Math.PI * 0.42, Math.PI * 0.42);
       ctx.stroke();
