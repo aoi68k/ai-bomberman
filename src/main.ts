@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnSetup = document.getElementById('btnSetup') as HTMLButtonElement;
   const btnBgm = document.getElementById('btnBgm') as HTMLButtonElement;
   const btnSfx = document.getElementById('btnSfx') as HTMLButtonElement;
+  const btnVibration = document.getElementById('btnVibration') as HTMLButtonElement;
   const btnReset = document.getElementById('btnReset') as HTMLButtonElement;
   const btnFullscreen = document.getElementById('btnFullscreen') as HTMLButtonElement;
   const btnPopup = document.getElementById('btnPopup') as HTMLButtonElement;
@@ -233,6 +234,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const isMuted = sounds.toggleMute();
     btnSfx.textContent = isMuted ? '🔇 SE: OFF' : '🔊 SE: ON';
     btnSfx.style.borderColor = isMuted ? 'var(--accent-rose)' : '#334155';
+  });
+
+  btnVibration?.addEventListener('click', () => {
+    const enabled = game.input.toggleVibration();
+    btnVibration.textContent = enabled ? '📳 振動: ON' : '📴 振動: OFF';
+    btnVibration.style.borderColor = enabled ? '#334155' : 'var(--accent-rose)';
   });
 
   btnReset.addEventListener('click', () => {

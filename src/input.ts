@@ -23,6 +23,7 @@ export class InputManager {
   private keysPressed: Set<string> = new Set();
   private prevPadButtons: Map<number, boolean[]> = new Map();
   private connectedGamepads: Map<number, GamepadInfo> = new Map();
+  public vibrationEnabled: boolean = true;
   public onGamepadChange?: (pads: GamepadInfo[]) => void;
 
   constructor() {
@@ -80,10 +81,16 @@ export class InputManager {
     return Array.from(this.connectedGamepads.values());
   }
 
+  public toggleVibration(): boolean {
+    this.vibrationEnabled = !this.vibrationEnabled;
+    return this.vibrationEnabled;
+  }
+
   /**
-   * Triggers haptic vibration rumble on a gamepad (if supported)
+   * Triggers haptic vibration rumble on a gamepad (if supported and enabled)
    */
   public vibrate(gamepadIndex: number, durationMs: number = 200, strong: number = 0.6, weak: number = 0.4) {
+    if (!this.vibrationEnabled) return;
     try {
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
       const pad = gamepads[gamepadIndex];
