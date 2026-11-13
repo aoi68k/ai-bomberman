@@ -37,6 +37,14 @@ export class Player {
   public hasMegaBomb: boolean = false; // Next bomb will be mega bomb
   public lastPlacedBombId: number | null = null; // For remote detonate
 
+  // Tackle state (e.g. Bomber Purple)
+  public isTackling: boolean = false;
+  public tackleDx: number = 0;
+  public tackleDy: number = 0;
+  public tackleRemainingDist: number = 0;
+  public tackleSpeed: number = 5.0; // Moderate, readable rush speed
+  public tackleHitEnemies: Set<number> = new Set();
+
   public isAlive: boolean = true;
   public deathTimer: number = 0; // For death spin animation
   public stunTimer: number = 0; // Stun duration in frames (stars over head, cannot act)
@@ -67,6 +75,12 @@ export class Player {
     this.skillCooldownTimer = 0;
     this.hasMegaBomb = false;
     this.lastPlacedBombId = null;
+    this.isTackling = false;
+    this.tackleDx = 0;
+    this.tackleDy = 0;
+    this.tackleRemainingDist = 0;
+    this.tackleSpeed = 5.0;
+    this.tackleHitEnemies.clear();
     this.isAlive = true;
     this.deathTimer = 0;
     this.stunTimer = 0;
@@ -111,7 +125,7 @@ export class Player {
    * Checks if a point collides with walls or non-passable bombs.
    * Uses an 8-point chamfered bounding box so players don't snag on microscopic corner pixels.
    */
-  private isColliding(checkX: number, checkY: number, map: GameMap, bombManager: BombManager): boolean {
+  public isColliding(checkX: number, checkY: number, map: GameMap, bombManager: BombManager): boolean {
     const r = PLAYER_HITBOX_RADIUS;
     const c = 3.0; // Corner chamfer offset (3px) prevents snagging on sharp corner edges
 
@@ -179,6 +193,12 @@ export class Player {
     if (this.stunTimer > 0) {
       this.stunTimer--;
       this.isMoving = false;
+      this.isTackling = false;
+      return;
+    }
+
+    // Tackling rush: automated charge, ignore directional input
+    if (this.isTackling) {
       return;
     }
 
@@ -338,6 +358,7 @@ export class Player {
       return false;
     }
 
+    this.cancelTackle();
     this.isAlive = false;
     this.deathTimer = 60;
     return true;
@@ -348,7 +369,38 @@ export class Player {
    */
   public stun(frames: number = 180) {
     if (!this.isAlive) return;
+    this.cancelTackle();
     this.stunTimer = Math.max(this.stunTimer, frames);
     this.isMoving = false;
+  }
+
+  /**
+   * Starts a tackle dash in the specified direction
+   */
+  public startTackle(dx: number, dy: number, distance: number = 96, speed: number = 5.0) {
+    this.isTackling = true;
+    this.tackleDx = dx;
+    this.tackleDy = dy;
+    this.tackleRemainingDist = distance;
+    this.tackleSpeed = speed;
+    this.tackleHitEnemies.clear();
+
+    // Corridor alignment: snap perpendicular axis to center of tile
+    if (dx !== 0) {
+      this.y = this.tileY * TILE_SIZE + TILE_SIZE / 2;
+      this.facing = dx > 0 ? 'right' : 'left';
+    } else if (dy !== 0) {
+      this.x = this.tileX * TILE_SIZE + TILE_SIZE / 2;
+      this.facing = dy > 0 ? 'down' : 'up';
+    }
+  }
+
+  /**
+   * Stops active tackle immediately
+   */
+  public cancelTackle() {
+    this.isTackling = false;
+    this.tackleRemainingDist = 0;
+    this.tackleHitEnemies.clear();
   }
 }

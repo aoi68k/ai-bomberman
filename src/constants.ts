@@ -137,7 +137,7 @@ export const CHARACTERS: Record<string, CharacterInfo> = {
     accentColor: '#fbbf24',
     skillType: 'TACKLE',
     skillName: 'スタンタックル (Tackle)',
-    skillDesc: '向いている方向へ3マス突進！当たった敵を3秒間スタンさせる',
+    skillDesc: '向いている方向へ2マス突進！当たった敵を3秒間スタンさせる',
     skillCooldown: 600, // 10 seconds
   },
 };

@@ -307,19 +307,30 @@ export class GameManager {
       }
     }
 
+    // Update active tackles (e.g. Bomber Purple's skill)
+    for (const p of this.players) {
+      if (p.isAlive && p.isTackling) {
+        this.updatePlayerTackle(p);
+      }
+    }
+
     // 1. Human (P1) input, movement, and skill
     const p1 = this.players[0];
     if (p1 && p1.isAlive) {
-      p1.move(p1Input.dx, p1Input.dy, this.map, this.bombManager, (kickedBomb) => {
-        sounds.playKick();
-      });
+      if (!p1.isTackling) {
+        p1.move(p1Input.dx, p1Input.dy, this.map, this.bombManager, (kickedBomb) => {
+          sounds.playKick();
+        });
 
-      if (p1Input.bomb) {
-        this.tryPlaceBomb(p1);
-      }
+        if (p1Input.bomb) {
+          this.tryPlaceBomb(p1);
+        }
 
-      if (p1Input.skill) {
-        this.tryUseSkill(p1);
+        if (p1Input.skill) {
+          if (this.tryUseSkill(p1) && p1.isTackling) {
+            this.updatePlayerTackle(p1);
+          }
+        }
       }
     }
 
@@ -425,7 +436,7 @@ export class GameManager {
   }
 
   private tryPlaceBomb(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0) return false;
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling) return false;
     if (player.activeBombs >= player.maxBombs) return false;
 
     // Determine all players overlapping this tile right now
@@ -462,7 +473,7 @@ export class GameManager {
    * Executes unique character skill
    */
   public tryUseSkill(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0) return false;
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling) return false;
     if (player.skillCooldownTimer > 0) return false;
 
     const skillType = player.config.skillType;
@@ -494,7 +505,7 @@ export class GameManager {
       }
 
       case 'TACKLE': {
-        // Tackle forward up to 3 tiles, stunning any opponent hit along the path for 3 seconds (180 frames)
+        // Tackle forward up to 2 tiles at readable rush speed, stunning any opponent hit along the path for 3 seconds (180 frames)
         const dirs = {
           up: { dx: 0, dy: -1 },
           down: { dx: 0, dy: 1 },
@@ -503,66 +514,19 @@ export class GameManager {
         };
         const { dx, dy } = dirs[player.facing];
 
-        let finalTx = player.tileX;
-        let finalTy = player.tileY;
-        const hitPlayers = new Set<Player>();
-
-        // Check path up to 3 tiles
-        for (let step = 1; step <= 3; step++) {
-          const checkTx = player.tileX + dx * step;
-          const checkTy = player.tileY + dy * step;
-
-          // Stop if hitting boundary wall, soft block, or bomb
-          if (!this.map.isWalkable(checkTx, checkTy) || this.bombManager.getBombAt(checkTx, checkTy)) {
-            break;
-          }
-
-          finalTx = checkTx;
-          finalTy = checkTy;
-
-          // Check if any opponent is hit along the charge line
-          const checkPx = checkTx * 48 + 24;
-          const checkPy = checkTy * 48 + 24;
-          for (const other of this.players) {
-            if (other.isAlive && other.config.id !== player.config.id) {
-              if (Math.hypot(other.x - checkPx, other.y - checkPy) < 38) {
-                hitPlayers.add(other);
-              }
-            }
-          }
-        }
-
-        // Must be able to advance at least 1 tile or have hit an adjacent opponent
-        if (finalTx === player.tileX && finalTy === player.tileY && hitPlayers.size === 0) {
+        // Check if cannot even move forward (facing wall or solid bomb right at hitbox)
+        if (player.isColliding(player.x + dx * 16, player.y + dy * 16, this.map, this.bombManager)) {
           return false;
         }
 
-        // Apply stun to all hit opponents
-        let hitSomeone = false;
-        for (const target of hitPlayers) {
-          target.stun(180); // 3 seconds at 60fps
-          hitSomeone = true;
-          this.particles.addItemGetParticles(target.x, target.y, '#facc15');
-          this.particles.addExplosionParticles(target.x, target.y, 10);
-          if (target.config.id === 0) {
-            this.input.vibrate(0, 300, 0.8, 0.5);
-          }
-        }
-
-        // Visual rush shockwave & trail
-        this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
-        player.x = finalTx * 48 + 24;
-        player.y = finalTy * 48 + 24;
-        this.particles.addItemGetParticles(player.x, player.y, '#8b5cf6');
-        this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
-        this.particles.triggerShake(hitSomeone ? 6 : 3, 10);
-
+        // Start tackle charge: 2 tiles (96px) at speed 5.0 px/frame (~19 frames = ~0.32s)
+        player.startTackle(dx, dy, 2 * 48, 5.0);
         player.skillCooldownTimer = player.config.skillCooldown;
         sounds.playKick();
+        this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
         if (player.config.id === 0) {
-          this.input.vibrate(0, hitSomeone ? 250 : 120, hitSomeone ? 0.7 : 0.4, 0.3);
+          this.input.vibrate(0, 120, 0.5, 0.2);
         }
-
         return true;
       }
 
@@ -602,6 +566,73 @@ export class GameManager {
     }
 
     return false;
+  }
+
+  /**
+   * Updates continuous tackle charge movement and collision
+   */
+  private updatePlayerTackle(player: Player) {
+    if (!player.isTackling || !player.isAlive) return;
+
+    if (player.stunTimer > 0) {
+      player.cancelTackle();
+      return;
+    }
+
+    const step = Math.min(player.tackleSpeed, player.tackleRemainingDist);
+    const nextX = player.x + player.tackleDx * step;
+    const nextY = player.y + player.tackleDy * step;
+
+    // Check collision with obstacles (wall, soft block, solid bomb)
+    if (player.isColliding(nextX, nextY, this.map, this.bombManager)) {
+      player.cancelTackle();
+      sounds.playWallThud();
+      this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
+      this.particles.triggerShake(3, 8);
+      return;
+    }
+
+    // Advance position
+    player.x = nextX;
+    player.y = nextY;
+    player.tackleRemainingDist -= step;
+    player.isMoving = true;
+    player.animFrame += 2;
+
+    // Trail particle
+    if (Math.random() < 0.65) {
+      this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
+    }
+
+    // Check collision against opponents
+    for (const other of this.players) {
+      if (other.isAlive && other.config.id !== player.config.id && !player.tackleHitEnemies.has(other.config.id)) {
+        const dist = Math.hypot(other.x - player.x, other.y - player.y);
+        if (dist < 36) {
+          player.tackleHitEnemies.add(other.config.id);
+          other.stun(180); // 3 seconds at 60fps
+          this.particles.addItemGetParticles(other.x, other.y, '#facc15');
+          this.particles.addExplosionParticles(other.x, other.y, 8);
+          this.particles.triggerShake(5, 12);
+          sounds.playKick();
+          if (player.config.id === 0) {
+            this.input.vibrate(0, 200, 0.8, 0.4);
+          }
+          if (other.config.id === 0) {
+            this.input.vibrate(0, 300, 0.8, 0.5);
+          }
+          // Stop tackle on impact
+          player.cancelTackle();
+          return;
+        }
+      }
+    }
+
+    // Finished tackle distance
+    if (player.tackleRemainingDist <= 0) {
+      player.cancelTackle();
+      this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
+    }
   }
 
   /**

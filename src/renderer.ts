@@ -490,6 +490,19 @@ export class GameRenderer {
       ctx.shadowBlur = 0;
     }
 
+    // Tackle Rush Aura if active
+    if (p.isAlive && p.isTackling) {
+      ctx.save();
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#a855f7';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(0, -2, 22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Stunned spinning stars over head
     if (p.isAlive && p.stunTimer > 0) {
       const now = Date.now();
