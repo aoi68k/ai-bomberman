@@ -4,6 +4,7 @@
 export type ImageKey = string;
 
 import { DEFAULT_IMAGE_BASE64 } from './defaultImages';
+import { CharacterInfo } from './constants';
 
 export class AssetManager {
   private images: Map<string, HTMLImageElement> = new Map();
@@ -98,6 +99,31 @@ export class AssetManager {
     item_kick: ['/assets/images/items/item_kick.png'],
     item_shield: ['/assets/images/items/item_shield.png'],
   };
+
+  /**
+   * Dynamically registers image paths for all characters loaded from character.json folders
+   */
+  public registerCharacters(characters: CharacterInfo[]) {
+    const dirs = ['down', 'up', 'left', 'right'] as const;
+    for (const c of characters) {
+      const folder = c.folder || c.charId;
+      const base = `/assets/images/characters/${folder}`;
+      if (!this.assetManifest[`char_${c.charId}`]) {
+        this.assetManifest[`char_${c.charId}`] = [`${base}/idle.png`];
+      }
+      if (!this.assetManifest[`portrait_${c.charId}`]) {
+        this.assetManifest[`portrait_${c.charId}`] = [`${base}/portrait.png`, `${base}/idle.png`];
+      }
+      for (const dir of dirs) {
+        for (const frame of [0, 1]) {
+          const key = `${c.charId}_${dir}_${frame}`;
+          if (!this.assetManifest[key]) {
+            this.assetManifest[key] = [`${base}/${dir}_${frame}.png`];
+          }
+        }
+      }
+    }
+  }
 
   public async loadAll(): Promise<void> {
     const promises = Object.entries(this.assetManifest).map(([key, urls]) => {

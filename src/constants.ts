@@ -86,53 +86,54 @@ export interface CharacterInfo {
  */
 export const CHARACTERS: Record<string, CharacterInfo> = {};
 
-// Bundled fallback via Vite glob (reads directly from character.json files for standalone/file:// mode)
+// Discover all folders under public/assets/images/characters/ that contain character.json
 const bundledCharacterModules = import.meta.glob<{ default: CharacterInfo }>(
   '../public/assets/images/characters/*/character.json',
   { eager: true }
 );
 
 /**
- * Loads all character definitions from character.json files under characters/
+ * Loads all character definitions from folders under characters/ that contain character.json
  */
 export async function loadCharacters(): Promise<void> {
-  // Clear existing entries
   for (const key of Object.keys(CHARACTERS)) {
     delete CHARACTERS[key];
   }
 
-  // 1. Try runtime fetch from /assets/images/characters/index.json (supports live JSON edits)
-  try {
-    const idxRes = await fetch('/assets/images/characters/index.json');
-    if (idxRes.ok) {
-      const charIds: string[] = await idxRes.json();
-      const loaded = await Promise.all(
-        charIds.map(async (id) => {
-          const res = await fetch(`/assets/images/characters/${id}/character.json`);
-          if (!res.ok) throw new Error(`Failed to load ${id}/character.json`);
-          return (await res.json()) as CharacterInfo;
-        })
-      );
-      for (const char of loaded) {
-        CHARACTERS[char.charId] = char;
-      }
-      if (Object.keys(CHARACTERS).length > 0) {
-        return;
-      }
-    }
-  } catch {
-    // Fallback to bundled JSONs (e.g. file:// standalone preview)
-  }
-
-  // 2. Fallback: populate from bundled character.json modules
   const preferredOrder = ['bomber_blue', 'bomber_black', 'bomber_red', 'bomber_green', 'bomber_purple', 'chen'];
   const entries: CharacterInfo[] = [];
-  for (const mod of Object.values(bundledCharacterModules)) {
-    const data = mod.default || (mod as unknown as CharacterInfo);
-    if (data && data.charId) {
-      entries.push(data);
-    }
-  }
+
+  await Promise.all(
+    Object.entries(bundledCharacterModules).map(async ([modulePath, mod]) => {
+      const match = modulePath.match(/characters\/([^/]+)\/character\.json$/);
+      if (!match) return;
+      const folderName = match[1];
+      const bundledData = mod.default || (mod as unknown as CharacterInfo);
+
+      let charData: CharacterInfo | null = null;
+      // Try live fetch first (so runtime edits to character.json are reflected immediately on HTTP server)
+      try {
+        const res = await fetch(`/assets/images/characters/${folderName}/character.json`, { cache: 'no-store' });
+        if (res.ok) {
+          charData = (await res.json()) as CharacterInfo;
+        }
+      } catch {
+        // Ignore fetch errors in standalone/file:// mode
+      }
+
+      if (!charData && bundledData) {
+        charData = { ...bundledData };
+      }
+
+      if (charData && charData.charId) {
+        if (!charData.folder) {
+          charData.folder = folderName;
+        }
+        entries.push(charData);
+      }
+    })
+  );
+
   entries.sort((a, b) => {
     const ia = preferredOrder.indexOf(a.charId);
     const ib = preferredOrder.indexOf(b.charId);
@@ -141,6 +142,7 @@ export async function loadCharacters(): Promise<void> {
     if (ib === -1) return -1;
     return ia - ib;
   });
+
   for (const char of entries) {
     CHARACTERS[char.charId] = char;
   }

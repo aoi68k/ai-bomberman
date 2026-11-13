@@ -11,8 +11,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
   if (!canvas) return;
 
-  // Preload custom PNG assets and character JSON definitions
-  await Promise.all([assets.loadAll(), loadCharacters()]);
+  // Preload character JSON definitions from characters/*/character.json, then load assets
+  await loadCharacters();
+  assets.registerCharacters(Object.values(CHARACTERS));
+  await assets.loadAll();
 
   const game = new GameManager(canvas);
 
@@ -49,6 +51,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     charGrid.innerHTML = '';
     const charList = Object.values(CHARACTERS).map((c) => ({
       id: c.charId,
+      folder: c.folder || c.charId,
       name: c.jpName,
       role: c.role,
       skill: c.skillName,
@@ -63,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.className = `char-card ${isSelected ? 'selected' : ''}`;
 
       const portraitImg = assets.getImage(`portrait_${c.id}` as any);
-      const portraitSrc = portraitImg ? portraitImg.src : `/assets/images/characters/${c.id}/idle.png`;
+      const portraitSrc = portraitImg ? portraitImg.src : `/assets/images/characters/${c.folder}/idle.png`;
 
       card.innerHTML = `
         <img src="${portraitSrc}" alt="${c.name}" class="char-portrait" />
