@@ -22,6 +22,7 @@ export interface ExplosionCell {
 
 export class ExplosionManager {
   public cells: ExplosionCell[] = [];
+  public crumblingBlocks: Array<{ tileX: number; tileY: number; life: number }> = [];
 
   public addExplosion(
     originX: number,
@@ -65,18 +66,16 @@ export class ExplosionManager {
           break;
         }
 
-        // Soft Block: Destroy block, add explosion cell here, and stop the ray
+        // If a soft block was just destroyed on this tile during the current explosion wave, also stop the ray here
+        if (this.crumblingBlocks.some((cb) => cb.tileX === tx && cb.tileY === ty)) {
+          break;
+        }
+
+        // Soft Block: Destroy block and stop the ray (explosion flame does not enter the destroyed block's tile)
         if (tile === TILE.SOFT_BLOCK) {
           map.destroySoftBlock(tx, ty);
+          this.crumblingBlocks.push({ tileX: tx, tileY: ty, life: EXPLOSION_DURATION });
           if (onBlockDestroyed) onBlockDestroyed(tx, ty);
-          this.cells.push({
-            tileX: tx,
-            tileY: ty,
-            direction: dir,
-            isEnd: true,
-            life: EXPLOSION_DURATION,
-            maxLife: EXPLOSION_DURATION,
-          });
           break;
         }
 
@@ -106,6 +105,12 @@ export class ExplosionManager {
         this.cells.splice(i, 1);
       }
     }
+    for (let i = this.crumblingBlocks.length - 1; i >= 0; i--) {
+      this.crumblingBlocks[i].life--;
+      if (this.crumblingBlocks[i].life <= 0) {
+        this.crumblingBlocks.splice(i, 1);
+      }
+    }
   }
 
   public isCellDangerous(x: number, y: number): boolean {
@@ -114,6 +119,7 @@ export class ExplosionManager {
 
   public clear() {
     this.cells = [];
+    this.crumblingBlocks = [];
   }
 }
 

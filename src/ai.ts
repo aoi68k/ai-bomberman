@@ -67,11 +67,9 @@ export class AIController {
           if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) break;
 
           const tile = map.getTile(tx, ty);
-          if (tile === TILE.WALL) break; // Hard wall blocks blast completely
+          if (tile === TILE.WALL || tile === TILE.SOFT_BLOCK) break; // Wall & soft block stop blast ray
 
           danger[ty][tx] = danger[ty][tx] === 0 ? timeLeft : Math.min(danger[ty][tx], timeLeft);
-
-          if (tile === TILE.SOFT_BLOCK) break; // Soft block blocks rest of the ray
         }
       }
     }
@@ -242,9 +240,9 @@ export class AIController {
         const tx = bx + dx * dist;
         const ty = by + dy * dist;
         if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) break;
-        if (map.getTile(tx, ty) === TILE.WALL) break;
+        const tile = map.getTile(tx, ty);
+        if (tile === TILE.WALL || tile === TILE.SOFT_BLOCK) break;
         simulatedDanger[ty][tx] = 150;
-        if (map.getTile(tx, ty) === TILE.SOFT_BLOCK) break;
       }
     }
 
