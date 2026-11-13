@@ -1347,3 +1347,24 @@ body.popup-mode .canvas-wrapper {
   color: #ffffff;
   box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
 }
+
+.roster-cursors {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.roster-cursor-tag {
+  font-size: 0.54rem;
+  font-weight: 900;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: #0a0c0f;
+  line-height: 1.05;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+}

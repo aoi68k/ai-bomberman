@@ -70,6 +70,43 @@ document.addEventListener('DOMContentLoaded', async () => {
   let footerFocus = 1; // 0: back, 1: battle start
   let pauseFocus = 0; // 0..7: pause menu buttons
   let showPadFocus = false;
+  const playerCursors: Record<number, number> = { 0: 0 };
+
+  const updateCursorOverlays = () => {
+    const cursorContainers = setupRoster.querySelectorAll<HTMLElement>('.roster-cursors');
+    cursorContainers.forEach((el) => {
+      const cIdx = Number(el.dataset.cidx);
+      if (net.role === 'OFFLINE') {
+        el.innerHTML = '';
+        return;
+      }
+      const tags = Object.entries(playerCursors)
+        .filter(([slotStr, pos]) => {
+          const sIdx = Number(slotStr);
+          const ctrl = draftSlots[sIdx]?.control;
+          return pos === cIdx && (ctrl === '1P' || ctrl === 'REMOTE');
+        })
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([slotStr]) => {
+          const sIdx = Number(slotStr);
+          return `<span class="roster-cursor-tag" style="background:${slotColors[sIdx]}">${sIdx + 1}P</span>`;
+        })
+        .join('');
+      el.innerHTML = tags;
+    });
+  };
+
+  const syncMyCursor = (charIdx: number) => {
+    const mySlot = net.role === 'GUEST' ? net.assignedSlot : 0;
+    if (playerCursors[mySlot] === charIdx) return;
+    playerCursors[mySlot] = charIdx;
+    if (net.role === 'HOST') {
+      net.broadcastLobbySync(draftSlots, playerCursors);
+    } else if (net.role === 'GUEST') {
+      net.sendCursorMove(charIdx);
+    }
+    updateCursorOverlays();
+  };
 
   const setSlotControl = (idx: number, nextCtrl: '1P' | 'COM' | 'OFF') => {
     if (net.role === 'GUEST') return;
@@ -83,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     draftSlots[idx].control = nextCtrl;
     if (net.role === 'HOST') {
-      net.broadcastLobbySync(draftSlots);
+      net.broadcastLobbySync(draftSlots, playerCursors);
     }
   };
 
@@ -138,21 +175,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         .join('');
 
       item.innerHTML = `
+        <div class="roster-cursors" data-cidx="${cIdx}"></div>
         <div class="roster-badges">${badgesHtml}</div>
         <img src="${portraitSrc}" alt="${charInfo.jpName}" class="roster-icon" />
         <span class="roster-name">${charInfo.jpName}</span>
       `;
 
+      item.addEventListener('mouseenter', () => {
+        rosterFocus = cIdx;
+        syncMyCursor(cIdx);
+      });
+
       item.addEventListener('click', () => {
         showPadFocus = false;
         rosterFocus = cIdx;
+        const mySlot = isGuest ? net.assignedSlot : 0;
+        playerCursors[mySlot] = cIdx;
         if (isGuest) {
           draftSlots[net.assignedSlot].charId = charInfo.charId;
+          net.sendCursorMove(cIdx);
           net.sendCharSelect(charInfo.charId);
         } else {
           draftSlots[activeSlotIdx].charId = charInfo.charId;
           if (isHost) {
-            net.broadcastLobbySync(draftSlots);
+            net.broadcastLobbySync(draftSlots, playerCursors);
           }
         }
         renderSetupGrid();
@@ -160,6 +206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       setupRoster.appendChild(item);
     });
+    updateCursorOverlays();
 
     // 2. Render 4 player slots below (each slot uses its fixed player color: 1P Red, 2P Blue, 3P Green, 4P Yellow)
     draftSlots.forEach((slot, idx) => {
@@ -508,34 +555,41 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (game.state === 'SETUP') {
       showPadFocus = true;
+      const isGuest = net.role === 'GUEST';
+      const isHost = net.role === 'HOST';
 
       if (input.cancel) {
         showTitleScreen();
         return;
       }
-      if (input.start) {
+      if (input.start && !isGuest) {
         if (!btnBattleStart.disabled) {
           startBattleFromSetup();
         }
         return;
       }
 
-      // LB / RB switches which player slot (P1..P4) is being edited
-      if (input.prevChar) {
-        activeSlotIdx = (activeSlotIdx + 3) % 4;
-      } else if (input.nextChar) {
-        activeSlotIdx = (activeSlotIdx + 1) % 4;
-      }
+      // LB / RB switches which player slot (P1..P4) is being edited (Host/Local only)
+      if (!isGuest) {
+        if (input.prevChar) {
+          activeSlotIdx = (activeSlotIdx + 3) % 4;
+        } else if (input.nextChar) {
+          activeSlotIdx = (activeSlotIdx + 1) % 4;
+        }
 
-      // X toggles 1P / COM / OFF for active slot
-      if (input.alt) {
-        const order: Array<'1P' | 'COM' | 'OFF'> = ['1P', 'COM', 'OFF'];
-        const cur = draftSlots[activeSlotIdx].control;
-        const next = order[(order.indexOf(cur) + 1) % order.length];
-        setSlotControl(activeSlotIdx, next);
+        // X toggles 1P / COM / OFF for active slot
+        if (input.alt) {
+          const order: Array<'1P' | 'COM' | 'OFF'> = ['1P', 'COM', 'OFF'];
+          const cur = draftSlots[activeSlotIdx].control;
+          if (cur !== 'REMOTE') {
+            const next = order[(order.indexOf(cur as '1P' | 'COM' | 'OFF') + 1) % order.length];
+            setSlotControl(activeSlotIdx, next);
+          }
+        }
       }
 
       if (setupArea === 'roster') {
+        const prevFocus = rosterFocus;
         if (input.dx !== 0) {
           const next = rosterFocus + input.dx * 2;
           if (next >= 0 && next < charList.length) {
@@ -555,8 +609,21 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }
 
+        if (rosterFocus !== prevFocus) {
+          syncMyCursor(rosterFocus);
+        }
+
         if (input.confirm && charList[rosterFocus]) {
-          draftSlots[activeSlotIdx].charId = charList[rosterFocus].charId;
+          const chosenCharId = charList[rosterFocus].charId;
+          if (isGuest) {
+            draftSlots[net.assignedSlot].charId = chosenCharId;
+            net.sendCharSelect(chosenCharId);
+          } else {
+            draftSlots[activeSlotIdx].charId = chosenCharId;
+            if (isHost) {
+              net.broadcastLobbySync(draftSlots, playerCursors);
+            }
+          }
         }
       } else {
         // footer area
@@ -570,7 +637,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (footerFocus === 0) {
             showTitleScreen();
             return;
-          } else if (footerFocus === 1 && !btnBattleStart.disabled) {
+          } else if (footerFocus === 1 && !btnBattleStart.disabled && !isGuest) {
             startBattleFromSetup();
             return;
           }

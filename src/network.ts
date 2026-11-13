@@ -106,13 +106,14 @@ export type SoundEventName =
   | 'roundOver';
 
 export type NetMessage =
-  | { type: 'WELCOME'; assignedSlot: number; slots: PlayerSlotConfig[]; connectedSlots: number[] }
+  | { type: 'WELCOME'; assignedSlot: number; slots: PlayerSlotConfig[]; connectedSlots: number[]; cursors: Record<number, number> }
   | { type: 'ROOM_FULL' }
-  | { type: 'LOBBY_SYNC'; slots: PlayerSlotConfig[]; connectedSlots: number[] }
+  | { type: 'LOBBY_SYNC'; slots: PlayerSlotConfig[]; connectedSlots: number[]; cursors: Record<number, number> }
   | { type: 'START_GAME'; slots: PlayerSlotConfig[] }
   | { type: 'STATE'; snapshot: GameSnapshot }
   | { type: 'SOUND'; event: SoundEventName }
   | { type: 'SELECT_CHAR'; charId: string }
+  | { type: 'CURSOR_MOVE'; charIdx: number }
   | { type: 'INPUT'; input: RemoteInputPayload };
 
 export type NetworkRole = 'OFFLINE' | 'HOST' | 'GUEST';
@@ -140,12 +141,13 @@ export class NetworkManager {
   private peerToSlot: Map<string, number> = new Map();
 
   public onLobbyUpdate?: (connectedSlots: number[]) => void;
-  public onGuestWelcome?: (assignedSlot: number, slots: PlayerSlotConfig[], connectedSlots: number[]) => void;
-  public onGuestLobbySync?: (slots: PlayerSlotConfig[], connectedSlots: number[]) => void;
+  public onGuestWelcome?: (assignedSlot: number, slots: PlayerSlotConfig[], connectedSlots: number[], cursors: Record<number, number>) => void;
+  public onGuestLobbySync?: (slots: PlayerSlotConfig[], connectedSlots: number[], cursors: Record<number, number>) => void;
   public onGuestStartGame?: (slots: PlayerSlotConfig[]) => void;
   public onGuestSnapshot?: (snapshot: GameSnapshot) => void;
   public onSoundEvent?: (event: SoundEventName) => void;
   public onRemoteCharSelect?: (slotIndex: number, charId: string) => void;
+  public onRemoteCursorMove?: (slotIndex: number, charIdx: number) => void;
   public onRemoteInput?: (slotIndex: number, input: RemoteInputPayload) => void;
   public onStatusChange?: (status: string, isConnected: boolean) => void;
   public onDisconnect?: (reason: string) => void;
@@ -164,6 +166,7 @@ export class NetworkManager {
 
   public createRoom(
     getSlots: () => PlayerSlotConfig[],
+    getCursors: () => Record<number, number>,
     assignSlotForGuest: (slotIndex: number) => void,
     releaseSlotForGuest: (slotIndex: number) => void
   ): Promise<string> {
@@ -216,15 +219,17 @@ export class NetworkManager {
           assignSlotForGuest(targetSlot);
 
           const updatedSlots = getSlots();
+          const updatedCursors = getCursors();
           const connectedSlots = this.getConnectedSlots();
           conn.send({
             type: 'WELCOME',
             assignedSlot: targetSlot,
             slots: updatedSlots,
             connectedSlots,
+            cursors: updatedCursors,
           } satisfies NetMessage);
 
-          this.broadcastLobbySync(updatedSlots);
+          this.broadcastLobbySync(updatedSlots, updatedCursors);
           this.onLobbyUpdate?.(connectedSlots);
         });
 
@@ -235,6 +240,8 @@ export class NetworkManager {
 
           if (msg.type === 'SELECT_CHAR') {
             this.onRemoteCharSelect?.(slotIdx, msg.charId);
+          } else if (msg.type === 'CURSOR_MOVE') {
+            this.onRemoteCursorMove?.(slotIdx, msg.charIdx);
           } else if (msg.type === 'INPUT') {
             this.onRemoteInput?.(slotIdx, msg.input);
           }
@@ -247,7 +254,7 @@ export class NetworkManager {
             this.guestConns.delete(slotIdx);
             releaseSlotForGuest(slotIdx);
             const connectedSlots = this.getConnectedSlots();
-            this.broadcastLobbySync(getSlots());
+            this.broadcastLobbySync(getSlots(), getCursors());
             this.onLobbyUpdate?.(connectedSlots);
           }
         });
@@ -288,7 +295,7 @@ export class NetworkManager {
             case 'WELCOME':
               this.assignedSlot = msg.assignedSlot;
               this.setStatus(`${msg.assignedSlot + 1}P として参加中 (${this.roomCode})`, true);
-              this.onGuestWelcome?.(msg.assignedSlot, msg.slots, msg.connectedSlots);
+              this.onGuestWelcome?.(msg.assignedSlot, msg.slots, msg.connectedSlots, msg.cursors || {});
               break;
             case 'ROOM_FULL':
               this.setStatus('ルームが満員です', false);
@@ -296,7 +303,7 @@ export class NetworkManager {
               this.onDisconnect?.('ルームが満員のため参加できませんでした。');
               break;
             case 'LOBBY_SYNC':
-              this.onGuestLobbySync?.(msg.slots, msg.connectedSlots);
+              this.onGuestLobbySync?.(msg.slots, msg.connectedSlots, msg.cursors || {});
               break;
             case 'START_GAME':
               this.onGuestStartGame?.(msg.slots);
@@ -330,12 +337,13 @@ export class NetworkManager {
     });
   }
 
-  public broadcastLobbySync(slots: PlayerSlotConfig[]) {
+  public broadcastLobbySync(slots: PlayerSlotConfig[], cursors: Record<number, number>) {
     if (this.role !== 'HOST') return;
     const msg: NetMessage = {
       type: 'LOBBY_SYNC',
       slots,
       connectedSlots: this.getConnectedSlots(),
+      cursors,
     };
     this.broadcast(msg);
   }
@@ -358,6 +366,12 @@ export class NetworkManager {
   public sendCharSelect(charId: string) {
     if (this.role === 'GUEST' && this.hostConn?.open) {
       this.hostConn.send({ type: 'SELECT_CHAR', charId } satisfies NetMessage);
+    }
+  }
+
+  public sendCursorMove(charIdx: number) {
+    if (this.role === 'GUEST' && this.hostConn?.open) {
+      this.hostConn.send({ type: 'CURSOR_MOVE', charIdx } satisfies NetMessage);
     }
   }
 
