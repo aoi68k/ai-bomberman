@@ -179,6 +179,46 @@ export class GameManager {
     this.broadcastStats();
   }
 
+  public updateSlotControlLive(
+    slotIndex: number,
+    control: '1P' | 'COM' | 'OFF' | 'REMOTE',
+    charId?: string
+  ) {
+    const slot = this.playerSlots[slotIndex];
+    if (!slot) return;
+    slot.control = control;
+    if (charId && (this.state === 'TITLE' || this.state === 'SETUP')) {
+      slot.charId = charId;
+    }
+
+    if (this.state === 'TITLE' || this.state === 'SETUP') {
+      this.setupPlayers();
+      this.broadcastStats();
+      return;
+    }
+
+    // Live match in progress: update existing player control / AI without resetting positions
+    const p = this.players.find((pl) => pl.config.id === slotIndex);
+    if (p) {
+      const fallbackChar = Object.values(CHARACTERS)[0];
+      const charData = CHARACTERS[p.config.charId] || CHARACTERS[slot.charId] || fallbackChar;
+      const isHuman = control === '1P' || control === 'REMOTE';
+      const labelPrefix =
+        control === '1P' ? '1P' : control === 'REMOTE' ? `${slotIndex + 1}P` : `COM ${slotIndex + 1}`;
+      const tag = control === 'REMOTE' ? `${slotIndex + 1}P` : control;
+      p.config.isHuman = isHuman;
+      p.config.name = `${labelPrefix} (${charData.jpName})`;
+      p.config.nameTag = tag;
+
+      this.aiControllers = this.aiControllers.filter((ai) => (ai as any).player?.config?.id !== slotIndex);
+      if (!isHuman && control === 'COM') {
+        this.aiControllers.push(new AIController(p));
+      }
+    }
+    this.comCount = this.players.filter((pl) => !pl.config.isHuman).length;
+    this.broadcastStats();
+  }
+
   public showTitle() {
     this.state = 'TITLE';
     this.broadcastStats();
@@ -1557,13 +1597,31 @@ export class GameManager {
         tick: ws.tick,
       })),
       tempestZones: this.activeTempestZones.map((tz) => ({ ...tz })),
+      playerSlots: this.playerSlots.map((s) => ({ ...s })),
+      itemSettings: { ...this.itemSettings },
     };
   }
 
   public applySnapshot(snap: GameSnapshot) {
     if (!snap) return;
 
-    if (this.players.length === 0) {
+    if (snap.itemSettings) {
+      this.itemSettings = { ...snap.itemSettings };
+    }
+
+    if (snap.playerSlots && snap.playerSlots.length > 0) {
+      const slotsChanged =
+        this.playerSlots.length !== snap.playerSlots.length ||
+        this.players.length === 0 ||
+        snap.playerSlots.some((s, i) => {
+          const cur = this.playerSlots[i];
+          return !cur || cur.charId !== s.charId || cur.control !== s.control;
+        });
+      if (slotsChanged) {
+        this.playerSlots = snap.playerSlots.map((s) => ({ ...s }));
+        this.setupPlayers();
+      }
+    } else if (this.players.length === 0) {
       this.setupPlayers();
     }
 

@@ -94,15 +94,71 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   const charList = Object.values(CHARACTERS);
+  const DRAFT_SLOTS_SESSION_KEY = 'abm_draft_slots';
+  const getCharIndex = (charId?: string): number => {
+    if (!charId) return 0;
+    const idx = charList.findIndex((c) => c.charId === charId);
+    return idx >= 0 ? idx : 0;
+  };
+
   const draftSlots = game.playerSlots.map((s) => ({ ...s }));
+  try {
+    const rawSavedSlots = sessionStorage.getItem(DRAFT_SLOTS_SESSION_KEY);
+    if (rawSavedSlots) {
+      const parsed = JSON.parse(rawSavedSlots) as Array<{ slotIndex: number; control: string; charId: string }>;
+      if (Array.isArray(parsed) && parsed.length === 4) {
+        parsed.forEach((ps, i) => {
+          if (draftSlots[i] && ps && CHARACTERS[ps.charId]) {
+            draftSlots[i].charId = ps.charId;
+            if (ps.control === '1P' || ps.control === 'COM' || ps.control === 'OFF') {
+              draftSlots[i].control = ps.control;
+            }
+          }
+        });
+        game.setPlayerSlots(draftSlots);
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+
+  const saveDraftSlotsToSession = () => {
+    try {
+      const serializable = draftSlots.map((s, idx) => ({
+        slotIndex: idx,
+        control: s.control === 'REMOTE' ? 'COM' : s.control,
+        charId: s.charId,
+      }));
+      sessionStorage.setItem(DRAFT_SLOTS_SESSION_KEY, JSON.stringify(serializable));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const slotColors = PLAYER_SLOT_COLORS;
   let activeSlotIdx = 0; // 0..3: slot currently receiving character selection
   let setupArea: 'roster' | 'footer' = 'roster';
-  let rosterFocus = 0; // 0..charList.length-1
+  let rosterFocus = getCharIndex(draftSlots[0]?.charId); // 0..charList.length-1
   let footerFocus = 1; // 0: back, 1: battle start
   let pauseFocus = 0; // 0..7: pause menu buttons
   let showPadFocus = false;
-  const playerCursors: Record<number, number> = { 0: 0 };
+  const playerCursors: Record<number, number> = {
+    0: getCharIndex(draftSlots[0]?.charId),
+    1: getCharIndex(draftSlots[1]?.charId),
+    2: getCharIndex(draftSlots[2]?.charId),
+    3: getCharIndex(draftSlots[3]?.charId),
+  };
+
+  const syncCursorsFromDraftSlots = (overrideCursors?: Record<number, number>) => {
+    for (let i = 0; i < 4; i++) {
+      const overrideVal = overrideCursors ? overrideCursors[i] : undefined;
+      if (typeof overrideVal === 'number' && overrideVal >= 0 && overrideVal < charList.length) {
+        playerCursors[i] = overrideVal;
+      } else {
+        playerCursors[i] = getCharIndex(draftSlots[i]?.charId);
+      }
+    }
+  };
 
   const updateCursorOverlays = () => {
     const cursorContainers = setupRoster.querySelectorAll<HTMLElement>('.roster-cursors');
@@ -133,7 +189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (playerCursors[mySlot] === charIdx) return;
     playerCursors[mySlot] = charIdx;
     if (net.role === 'HOST') {
-      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings());
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings(), game.state);
     } else if (net.role === 'GUEST') {
       net.sendCursorMove(charIdx);
     }
@@ -151,8 +207,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
     draftSlots[idx].control = nextCtrl;
+    saveDraftSlotsToSession();
+    if (game.state === 'TITLE' || game.state === 'SETUP') {
+      game.setPlayerSlots(draftSlots);
+    }
     if (net.role === 'HOST') {
-      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings());
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings(), game.state);
     }
   };
 
@@ -221,17 +281,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       item.addEventListener('click', () => {
         showPadFocus = false;
         rosterFocus = cIdx;
-        const mySlot = isGuest ? net.assignedSlot : 0;
-        playerCursors[mySlot] = cIdx;
+        const targetSlot = isGuest ? net.assignedSlot : activeSlotIdx;
+        playerCursors[targetSlot] = cIdx;
         if (isGuest) {
           draftSlots[net.assignedSlot].charId = charInfo.charId;
+          net.saveRoomChar(charInfo.charId);
           net.sendCursorMove(cIdx);
           net.sendCharSelect(charInfo.charId);
         } else {
           draftSlots[activeSlotIdx].charId = charInfo.charId;
           if (isHost) {
-            net.broadcastLobbySync(draftSlots, playerCursors);
+            net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings(), game.state);
           }
+        }
+        saveDraftSlotsToSession();
+        if (game.state === 'TITLE' || game.state === 'SETUP') {
+          game.setPlayerSlots(draftSlots);
         }
         renderSetupGrid();
       });
@@ -323,6 +388,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         s.control = idx === 0 ? '1P' : 'COM';
       }
     });
+    saveDraftSlotsToSession();
+    if (game.state === 'TITLE' || game.state === 'SETUP') {
+      game.setPlayerSlots(draftSlots);
+    }
     btnModeLocal.classList.add('active');
     btnModeOnline.classList.remove('active');
     onlineBar.classList.add('hidden');
@@ -330,8 +399,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSetupGrid();
   };
 
+  const joinRoomAsGuest = async (targetRoom: string) => {
+    const code = targetRoom.trim().toUpperCase();
+    game.isOnlineHost = false;
+    game.isOnlineGuest = true;
+    btnModeLocal.classList.remove('active');
+    btnModeOnline.classList.add('active');
+    onlineBar.classList.remove('hidden');
+    onlineInviteRow.classList.add('hidden');
+    onlineSubHint.textContent = `ルーム ${code} へ接続中...`;
+    const preferredCharId = net.getSavedRoomChar(code);
+    const cursorIdx = preferredCharId ? getCharIndex(preferredCharId) : undefined;
+    try {
+      await net.joinRoom(code, preferredCharId, cursorIdx);
+    } catch {
+      alert('ルームが見つからないか、接続に失敗しました。');
+      switchToLocalMode();
+      showSetupScreen();
+    }
+  };
+
   const switchToOnlineMode = async () => {
     if (net.role === 'HOST' || net.role === 'GUEST') return;
+    const currentRoomParam = new URLSearchParams(window.location.search).get('room');
+    if (currentRoomParam) {
+      await joinRoomAsGuest(currentRoomParam);
+      return;
+    }
+
     btnModeLocal.classList.remove('active');
     btnModeOnline.classList.add('active');
     onlineBar.classList.remove('hidden');
@@ -342,11 +437,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (chkItemShield) chkItemShield.disabled = false;
     if (chkItemChainBomb) chkItemChainBomb.disabled = false;
 
-    // Ensure slot 0 is 1P (Host)
+    // Ensure slot 0 is 1P (Host) and sync cursors to currently selected characters
     draftSlots.forEach((s, idx) => {
       if (idx === 0) s.control = '1P';
       else if (s.control === '1P') s.control = 'COM';
     });
+    syncCursorsFromDraftSlots();
+    saveDraftSlotsToSession();
+    game.setPlayerSlots(draftSlots);
     renderSetupGrid();
 
     try {
@@ -354,18 +452,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         () => draftSlots,
         () => playerCursors,
         () => getItemSettings(),
-        (slotIdx) => {
+        (slotIdx, preferredCharId, cursorIdx) => {
           if (draftSlots[slotIdx]) {
             draftSlots[slotIdx].control = 'REMOTE';
+            if (preferredCharId && CHARACTERS[preferredCharId]) {
+              draftSlots[slotIdx].charId = preferredCharId;
+            }
+            playerCursors[slotIdx] =
+              typeof cursorIdx === 'number' && cursorIdx >= 0 && cursorIdx < charList.length
+                ? cursorIdx
+                : getCharIndex(draftSlots[slotIdx].charId);
           }
+          saveDraftSlotsToSession();
+          game.updateSlotControlLive(slotIdx, 'REMOTE', draftSlots[slotIdx]?.charId);
           renderSetupGrid();
         },
         (slotIdx) => {
           if (draftSlots[slotIdx]) {
             draftSlots[slotIdx].control = 'COM';
           }
+          saveDraftSlotsToSession();
+          game.updateSlotControlLive(slotIdx, 'COM', draftSlots[slotIdx]?.charId);
           renderSetupGrid();
-        }
+        },
+        () => game.state,
+        () => game.exportSnapshot()
       );
       inviteUrlInput.value = net.getInviteUrl();
       onlineInviteRow.classList.remove('hidden');
@@ -387,10 +498,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderSetupGrid();
   };
 
+  net.onRemoteCursorMove = (slotIdx, charIdx) => {
+    if (charIdx >= 0 && charIdx < charList.length) {
+      playerCursors[slotIdx] = charIdx;
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings(), game.state);
+      updateCursorOverlays();
+    }
+  };
+
   net.onRemoteCharSelect = (slotIdx, charId) => {
-    if (draftSlots[slotIdx]) {
+    if (draftSlots[slotIdx] && CHARACTERS[charId]) {
       draftSlots[slotIdx].charId = charId;
-      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings());
+      playerCursors[slotIdx] = getCharIndex(charId);
+      saveDraftSlotsToSession();
+      if (game.state === 'TITLE' || game.state === 'SETUP') {
+        game.setPlayerSlots(draftSlots);
+      }
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings(), game.state);
       renderSetupGrid();
     }
   };
@@ -399,25 +523,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     game.setRemoteInput(slotIdx, inp);
   };
 
-  net.onGuestWelcome = (assignedSlot, slots, connectedSlots, cursors, itemSettings) => {
+  const applySyncedLobbyState = (
+    slots: typeof draftSlots,
+    cursors: Record<number, number>,
+    itemSettings: ItemSettings,
+    hostState?: string
+  ) => {
     for (let i = 0; i < 4; i++) {
       if (slots[i]) draftSlots[i] = { ...slots[i] };
     }
-    activeSlotIdx = assignedSlot;
+    syncCursorsFromDraftSlots(cursors);
+    saveDraftSlotsToSession();
     applyItemSettingsToGame(itemSettings);
     if (chkItemShield) chkItemShield.disabled = true;
     if (chkItemChainBomb) chkItemChainBomb.disabled = true;
+
+    if (
+      hostState === 'SETUP' ||
+      hostState === 'TITLE' ||
+      game.state === 'SETUP' ||
+      game.state === 'TITLE'
+    ) {
+      game.setPlayerSlots(draftSlots);
+    }
+
+    if ((hostState === 'SETUP' || hostState === 'TITLE') && game.state !== 'SETUP') {
+      titleScreen.classList.add('hidden');
+      setupScreen.classList.remove('hidden');
+      game.showSetup();
+    }
+  };
+
+  net.onGuestWelcome = (assignedSlot, slots, connectedSlots, cursors, itemSettings, hostState) => {
+    activeSlotIdx = assignedSlot;
+    applySyncedLobbyState(slots, cursors, itemSettings, hostState);
+    rosterFocus = getCharIndex(draftSlots[assignedSlot]?.charId);
     onlineSubHint.textContent = `あなたは ${assignedSlot + 1}P です。キャラを選んでホストの開始をお待ちください`;
     renderSetupGrid();
   };
 
-  net.onGuestLobbySync = (slots, connectedSlots, cursors, itemSettings) => {
-    for (let i = 0; i < 4; i++) {
-      if (slots[i]) draftSlots[i] = { ...slots[i] };
-    }
-    applyItemSettingsToGame(itemSettings);
-    if (chkItemShield) chkItemShield.disabled = true;
-    if (chkItemChainBomb) chkItemChainBomb.disabled = true;
+  net.onGuestLobbySync = (slots, connectedSlots, cursors, itemSettings, hostState) => {
+    applySyncedLobbyState(slots, cursors, itemSettings, hostState);
     renderSetupGrid();
   };
 
@@ -426,6 +572,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   net.onGuestStartGame = (slots, itemSettings) => {
+    for (let i = 0; i < 4; i++) {
+      if (slots[i]) draftSlots[i] = { ...slots[i] };
+    }
+    syncCursorsFromDraftSlots();
+    saveDraftSlotsToSession();
     titleScreen.classList.add('hidden');
     setupScreen.classList.add('hidden');
     game.isOnlineHost = false;
@@ -437,7 +588,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   net.onGuestSnapshot = (snap) => {
-    if (snap.state === 'PLAYING' || snap.state === 'COUNTDOWN') {
+    if (snap.playerSlots) {
+      for (let i = 0; i < 4; i++) {
+        if (snap.playerSlots[i]) draftSlots[i] = { ...snap.playerSlots[i] };
+      }
+      if (draftSlots[net.assignedSlot]?.charId) {
+        net.saveRoomChar(draftSlots[net.assignedSlot].charId);
+      }
+    }
+    if (snap.itemSettings) {
+      if (chkItemShield) chkItemShield.checked = snap.itemSettings.shield;
+      if (chkItemChainBomb) chkItemChainBomb.checked = snap.itemSettings.chainBomb;
+    }
+    if (
+      snap.state === 'PLAYING' ||
+      snap.state === 'COUNTDOWN' ||
+      snap.state === 'ROUND_OVER' ||
+      snap.state === 'PAUSED'
+    ) {
       titleScreen.classList.add('hidden');
       setupScreen.classList.add('hidden');
     }
@@ -512,12 +680,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupScreen.classList.remove('hidden');
     activeSlotIdx = net.role === 'GUEST' ? net.assignedSlot : 0;
     setupArea = 'roster';
-    rosterFocus = Math.max(
-      0,
-      charList.findIndex((c) => c.charId === draftSlots[activeSlotIdx]?.charId)
-    );
+    rosterFocus = getCharIndex(draftSlots[activeSlotIdx]?.charId);
     showPadFocus = game.input.getConnectedGamepads().some((p) => p.connected);
+    game.setPlayerSlots(draftSlots);
     game.showSetup();
+    if (net.role === 'HOST') {
+      net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings(), 'SETUP');
+    }
     renderSetupGrid();
   };
 
@@ -676,14 +845,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (input.confirm && charList[rosterFocus]) {
           const chosenCharId = charList[rosterFocus].charId;
+          const targetSlot = isGuest ? net.assignedSlot : activeSlotIdx;
+          playerCursors[targetSlot] = rosterFocus;
           if (isGuest) {
             draftSlots[net.assignedSlot].charId = chosenCharId;
+            net.saveRoomChar(chosenCharId);
+            net.sendCursorMove(rosterFocus);
             net.sendCharSelect(chosenCharId);
           } else {
             draftSlots[activeSlotIdx].charId = chosenCharId;
             if (isHost) {
-              net.broadcastLobbySync(draftSlots, playerCursors);
+              net.broadcastLobbySync(draftSlots, playerCursors, getItemSettings(), game.state);
             }
+          }
+          saveDraftSlotsToSession();
+          if (game.state === 'TITLE' || game.state === 'SETUP') {
+            game.setPlayerSlots(draftSlots);
           }
         }
       } else {
@@ -998,22 +1175,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindTouch('btnSkillTouch', 'KeyE');
   bindTouch('btnUltraTouch', 'KeyQ');
 
+  const handlePageUnload = () => {
+    if (net.role === 'GUEST') {
+      const myChar = draftSlots[net.assignedSlot]?.charId;
+      net.saveRejoinStateOnUnload(myChar);
+    }
+    saveDraftSlotsToSession();
+    net.disconnect();
+  };
+  window.addEventListener('pagehide', handlePageUnload);
+  window.addEventListener('beforeunload', handlePageUnload);
+
   // Start on Title Screen -> Player Setup -> Battle (or auto-join if ?room= is present)
   const roomParam = new URLSearchParams(window.location.search).get('room');
   if (roomParam) {
-    game.isOnlineHost = false;
-    game.isOnlineGuest = true;
-    btnModeLocal.classList.remove('active');
-    btnModeOnline.classList.add('active');
-    onlineBar.classList.remove('hidden');
-    onlineInviteRow.classList.add('hidden');
-    onlineSubHint.textContent = `ルーム ${roomParam.toUpperCase()} へ接続中...`;
     showSetupScreen();
-    net.joinRoom(roomParam).catch(() => {
-      alert('ルームが見つからないか、接続に失敗しました。');
-      switchToLocalMode();
-      showSetupScreen();
-    });
+    void joinRoomAsGuest(roomParam);
   } else {
     showTitleScreen();
   }
