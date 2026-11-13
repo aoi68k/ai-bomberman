@@ -1,6 +1,6 @@
-# AI Bomber 画像アセット作成ガイドライン (Asset Creation Guidelines) 🎨
+# AI Bomber 画像・キャラクター作成ガイドライン (Asset & Character Guidelines) 🎨
 
-このドキュメントは、AI画像生成ツール（Midjourney、DALL-E、Stable Diffusion、その他チャットAI）やドット絵エディタで「AI Bomber」用の画像アセットを作成・差し替えるための公式仕様書・プロンプトテンプレート集です。
+このドキュメントは、AI画像生成ツール（Midjourney、DALL-E、Stable Diffusion、その他チャットAI）やドット絵エディタで「AI Bomber」用の画像アセットを作成・差し替えたり、新しいキャラクターを追加するための公式仕様書・プロンプトテンプレート集です。
 
 ---
 
@@ -18,64 +18,94 @@
 
 ## 📁 ディレクトリ構造 (Folder Structure)
 
-画像はキャラクターごと、環境ごとに整理されたフォルダに配置します。
+画像は `public/assets/images/` 配下にキャラクターごと・環境ごとに整理されています。
+特に `characters/<キャラID>/character.json` を配置するだけで、ゲーム起動時に自動でキャラクター一覧に読み込まれます。
 
 ```text
-public/assets/images/
-├── characters/
-│   ├── bomber_blue/           # キャラ1: ボンバーブルー（スタンダード）
-│   │   ├── down_0.png, down_1.png   # 正面（下）歩行モーション 2コマ
-│   │   ├── up_0.png, up_1.png       # 背面（上）歩行モーション 2コマ
-│   │   ├── left_0.png, left_1.png   # 左向き歩行モーション 2コマ
-│   │   ├── right_0.png, right_1.png # 右向き歩行モーション 2コマ
-│   │   ├── idle.png                 # 待機・共通
-│   │   └── portrait.png             # キャラ選択画面用アイコン (64x64 or 128x128)
-│   ├── bomber_black/          # キャラ2: ボンバーブラック（スピードスター）
-│   │   ├── down_0.png, down_1.png, up_0.png, up_1.png...
-│   │   ├── left_0.png, left_1.png, right_0.png, right_1.png...
-│   │   └── portrait.png
-│   ├── bomber_red/            # キャラ3: ボンバーレッド（パワーファイター）
-│   │   ├── down_0.png, down_1.png, up_0.png, up_1.png...
-│   │   ├── left_0.png, left_1.png, right_0.png, right_1.png...
-│   │   └── portrait.png
-│   ├── bomber_green/          # キャラ4: ボンバーグリーン（ディフェンダー）
-│   │   ├── down_0.png, down_1.png, up_0.png, up_1.png...
-│   │   ├── left_0.png, left_1.png, right_0.png, right_1.png...
-│   │   └── portrait.png
-│   └── bomber_purple/         # キャラ5: ボンバーパープル（ストライカー）
-│       ├── down_0.png, down_1.png, up_0.png, up_1.png...
-│       ├── left_0.png, left_1.png, right_0.png, right_1.png...
-│       └── portrait.png
-├── environment/
-│   ├── wall.png               # 壊せない壁（ハードブロック）
-│   ├── soft_block.png         # 壊せるブロック（レンガ・木箱）
-│   └── floor.png              # 地面タイル
-└── items/
-    ├── bomb.png               # 爆弾
-    ├── item_bomb_up.png       # ボムUP
-    ├── item_fire_up.png       # 火力UP
-    ├── item_speed_up.png      # 速度UP
-    ├── item_kick.png          # ボムキック
-    └── item_shield.png        # シールド
+public/
+├── og-preview.png               # 通常リンク共有用OGP画像 (1200×630)
+├── og-invite.png                # マルチプレイ招待リンク用OGP画像 (1200×360 横長バナー)
+└── assets/images/
+    ├── characters/
+    │   ├── bomber_blue/         # キャラ1: ボンバーブルー（オールラウンダー）
+    │   │   ├── character.json           # キャラ定義・ステータス・スキル設定ファイル
+    │   │   ├── down_0.png, down_1.png   # 正面（下）歩行モーション 2コマ
+    │   │   ├── up_0.png, up_1.png       # 背面（上）歩行モーション 2コマ
+    │   │   ├── left_0.png, left_1.png   # 左向き歩行モーション 2コマ
+    │   │   ├── right_0.png, right_1.png # 右向き歩行モーション 2コマ
+    │   │   ├── idle.png                 # 待機・共通フォールバック画像
+    │   │   └── portrait.png             # キャラ選択・HUD用顔アイコン (64x64 or 128x128)
+    │   ├── bomber_black/        # キャラ2: ボンバーブラック（スピードスター）
+    │   ├── bomber_red/          # キャラ3: ボンバーレッド（パワーファイター）
+    │   ├── bomber_green/        # キャラ4: ボンバーグリーン（ディフェンダー）
+    │   ├── bomber_purple/       # キャラ5: ボンバーパープル（ストライカー）
+    │   ├── chen/                # キャラ6: チェン（龍剣士）
+    │   └── yangyang/            # キャラ7: 秧秧（疾風 / 連撃）
+    ├── environment/
+    │   ├── wall.png             # 壊せない壁（ハードブロック）
+    │   ├── soft_block.png       # 壊せるブロック（レンガ・木箱）
+    │   └── floor.png            # 地面タイル
+    └── items/
+        ├── bomb.png             # 爆弾
+        ├── item_bomb_up.png     # ボムUP
+        ├── item_fire_up.png     # 火力UP
+        ├── item_speed_up.png    # 速度UP
+        ├── item_kick.png        # ボムキック
+        └── item_shield.png      # シールド（バリア）
 ```
 
 ---
 
-## ⚡ キャラクター固有技（スキル）仕様一覧
+## ⚡ キャラクター固有技（スキル）＆ 超技（必殺技）仕様一覧
 
-ゲーム開始前の**キャラクター選択画面**で以下の5人から選択できます。コントローラーの **Xボタン** または キーボードの **E / Shiftキー** で固有技を発動できます（クールダウン制）。
+- **固有技（スキル）**: コントローラーの **Xボタン** または キーボードの **E / Shiftキー** で発動（クールダウン制）。
+- **超技（必殺技）**: ボムを10個設置して超技ゲージが100%になると、コントローラーの **Y / LBボタン** または キーボードの **Q / Cキー** で発動可能。
+- **連爆（Chain Bomb）**: フィールド上の「⚡💣 連爆」アイテムを取得すると、**ボムボタン2連打**（またはスキルボタン）で前方へ最大4個まで時間差連鎖ボムを一列設置できます。
 
-| キャラID | 名前 | 特徴 | 固有技名 | 固有技効果 | クールダウン |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `bomber_blue` | **ブルー (Blue)** | オールラウンダー | **ダッシュ (Dash)** | 瞬間的に2マス前方へ高速ダッシュ。爆風からの緊急脱出に最適 | 8秒 |
-| `bomber_black` | **ブラック (Black)** | アグレッシブ | **リモコンボム (Remote Detonate)** | 最後に置いた自分のボムを好きなタイミングで遠隔起爆 | 10秒 |
-| `bomber_red` | **レッド (Red)** | パワフル | **パワーボム (Mega Bomb)** | 次に置くボムが周囲のソフトブロックを貫通する巨大火炎ボムになる | 14秒 |
-| `bomber_green` | **グリーン (Green)** | テクニカル | **バリア生成 (Shield Deploy)** | 3秒間持続する爆風ガードシールドを即座に1枚展開 | 16秒 |
-| `bomber_purple` | **パープル (Purple)** | ストライカー | **スタンタックル (Tackle)** | 前方3マス先へ素早くタックル突進！衝突した相手を3秒間気絶（頭上に星が回転）させる | 10秒 |
+| キャラID | 名前 | ロール | 固有技 (CD) | 固有技効果 | 超技（必殺技） | 超技効果 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `bomber_blue` | **ボンバーブルー** | オールラウンダー | **ダッシュ** (8秒) | 向いている方向へ素早く2マス突進し、爆風を緊急回避 | **閃光ダッシュ** | 前方3マスへ高速ワープ＆1秒間無敵！ |
+| `bomber_black` | **ボンバーブラック** | スピードスター | **リモコン起爆** (10秒) | 直前に置いた自分のボムを好きなタイミングで遠隔爆破 | **一斉起爆** | 設置中の自分のボムすべてを即座に大爆発させる！ |
+| `bomber_red` | **ボンバーレッド** | パワーファイター | **メガボム** (12秒) | 次回置くボムが火力+4（最大8）の赤金オーラ付き強化ボムになる | **ノヴァボム** | 最大火力8の超特大メガボムを足元に即時展開！ |
+| `bomber_green` | **ボンバーグリーン** | ディフェンダー | **緊急シールド** (15秒) | 爆風を防ぐエネルギーシールドを即座に1枚展開（最大2枚） | **フォートレス** | シールド2枚展開＆2秒間完全無敵状態になる！ |
+| `bomber_purple` | **ボンバーパープル** | ストライカー | **スタンタックル** (10秒) | 前方2マスへ突進し、衝突した相手を3秒間スタン（気絶）させる | **メテオタックル** | 前方3マスへ貫通猛突進！当たった敵を4秒間スタンさせる |
+| `chen` | **チェン (Chen)** | 龍剣士 | **二連斬り突進** (10秒) | 前方0〜1マスに二連斬撃後、2マス斬撃突進（命中時3秒スタン） | **龍閃乱れ斬り** | 連続斬撃を繰り出しながら前方4マス突進（命中時3秒スタン） |
+| `yangyang` | **秧秧 (Yangyang)** | 疾風 / 連撃 | **風鳴乱舞** (8秒) | 前方2マスへ乱れ斬りの風刃を飛ばす（命中時2秒スタン） | **疾風万刃域** | 前方1マス先を中心に3×3マスの乱れ斬エリアを4秒間展開（2秒スタン） |
 
 ---
 
-## 🤖 他チャット用 AI画像生成プロンプトテンプレート
+## 🧩 `character.json` によるキャラクター追加・編集方法
+
+`public/assets/images/characters/<任意のフォルダ名>/character.json` を作成すると、コードを変更することなくキャラクターのステータスやテキストを調整できます。
+
+```json
+{
+  "charId": "chen",
+  "name": "Chen",
+  "jpName": "チェン",
+  "role": "龍剣士",
+  "color": "#0284c7",
+  "subColor": "#f8fafc",
+  "accentColor": "#38bdf8",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "CHEN_SLASH_RUSH",
+  "skillName": "二連斬り突進 (Slash Rush)",
+  "skillDesc": "前方0～1マスに2回斬撃ののち、0～2マス斬撃しながら突進（3秒スタン）",
+  "skillCooldown": 600,
+  "ultraType": "CHEN_TEMPEST_RUSH",
+  "ultraName": "龍閃乱れ斬り (Tempest)",
+  "ultraDesc": "斬撃乱れ斬をしながら前方4マス突進！斬撃を受けた敵を3秒スタン",
+  "ultraCooldown": 1200
+}
+```
+
+---
+
+## 🤖 AI画像生成プロンプトテンプレート
 
 ChatGPTやMidjourney等で画像を生成する際は、以下のプロンプトをそのままコピー＆ペーストして使えます。
 
@@ -130,7 +160,7 @@ ChatGPTやMidjourney等で画像を生成する際は、以下のプロンプト
 
 ## 🛠️ 画像の取り込み手順
 
-1. 他チャットや画像編集ソフトで画像を生成・作成します。
-2. 48×48 px（または正方形）で保存します。
-3. `public/assets/images/characters/[各キャラフォルダ]/idle.png` や `public/assets/images/environment/` に配置・上書き保存します。
-4. ゲームを再読み込みすると、自動的に新しい画像が反映されます！
+1. AI画像生成ツールや画像編集ソフトで画像を生成・作成します。
+2. 48×48 px（または正方形の透過PNG）で保存します。
+3. `public/assets/images/characters/[各キャラフォルダ]/` や `public/assets/images/environment/` に配置・上書き保存します。
+4. ゲームを再読み込みすると、自動的に新しい画像が反映されます。
