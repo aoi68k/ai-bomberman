@@ -66,7 +66,7 @@ export interface CharacterInfo {
   name: string;
   jpName: string;
   role: string;
-  folder: string;
+  folder?: string; // Populated automatically from directory scan
   color: string;
   subColor: string;
   accentColor: string;
