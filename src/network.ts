@@ -135,6 +135,8 @@ export type SoundEventName =
   | 'death'
   | 'shieldBreak'
   | 'wallThud'
+  | 'countdownTick'
+  | 'battleStart'
   | 'roundOver';
 
 export type NetMessage =

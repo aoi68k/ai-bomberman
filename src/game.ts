@@ -288,6 +288,9 @@ export class GameManager {
       p.reset();
     }
 
+    sounds.playCountdownTick();
+    this.emitSound('countdownTick');
+
     this.broadcastStats();
   }
 
@@ -482,17 +485,25 @@ export class GameManager {
     if (this.state === 'COUNTDOWN') {
       this.countdownTimer--;
       if (this.overheadTagTimer > 0) this.overheadTagTimer--;
-      if (this.countdownTimer <= 0) {
+      if (this.countdownTimer === 120 || this.countdownTimer === 60) {
+        sounds.playCountdownTick();
+        this.emitSound('countdownTick');
+      } else if (this.countdownTimer <= 0) {
         this.state = 'PLAYING';
-        sounds.playHurry();
-        this.emitSound('hurry');
+        sounds.playBattleStart();
+        this.emitSound('battleStart');
         this.broadcastStats();
       }
       this.particles.update();
       this.input.endFrame();
       if (this.isOnlineHost) {
         this.syncTickCounter++;
-        if (this.syncTickCounter % 2 === 0 || this.state === 'PLAYING') {
+        if (
+          this.syncTickCounter % 2 === 0 ||
+          this.countdownTimer === 120 ||
+          this.countdownTimer === 60 ||
+          this.state === 'PLAYING'
+        ) {
           this.onHostSnapshot?.(this.exportSnapshot());
         }
       }
@@ -1548,6 +1559,8 @@ export class GameManager {
       const count = Math.ceil(this.countdownTimer / 60);
       const label = count > 0 ? `${count}` : 'BATTLE!';
       this.drawBigBanner(ctx, label, '#facc15');
+    } else if (this.state === 'PLAYING' && this.overheadTagTimer > 145) {
+      this.drawBigBanner(ctx, 'BATTLE!', '#facc15');
     } else if (this.state === 'ROUND_OVER') {
       const bannerText = this.roundWinner ? `${this.roundWinner.config.name} WINS!` : 'DRAW GAME!';
       const bannerColor = this.roundWinner ? this.roundWinner.config.accentColor : '#94a3b8';
@@ -1750,6 +1763,18 @@ export class GameManager {
       }
     } else if (this.players.length === 0) {
       this.setupPlayers();
+    }
+
+    const prevState = this.state;
+    const prevCountSec = Math.ceil(this.countdownTimer / 60);
+    const nextCountSec = Math.ceil(snap.countdownTimer / 60);
+
+    if (snap.state === 'COUNTDOWN' && nextCountSec > 0) {
+      if (prevState !== 'COUNTDOWN' || nextCountSec !== prevCountSec) {
+        sounds.playCountdownTick();
+      }
+    } else if (prevState === 'COUNTDOWN' && snap.state === 'PLAYING') {
+      sounds.playBattleStart();
     }
 
     this.state = snap.state;

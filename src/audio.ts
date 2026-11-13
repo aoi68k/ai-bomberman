@@ -14,6 +14,8 @@ class SoundManager {
   private lastExplosionAt: number = 0;
   private lastKickAt: number = 0;
   private lastItemAt: number = 0;
+  private lastCountdownAt: number = 0;
+  private lastBattleStartAt: number = 0;
 
   constructor() {
     // Lazily initialize upon first user gesture
@@ -312,6 +314,61 @@ class SoundManager {
 
     osc.start(t);
     osc.stop(t + 0.2);
+  }
+
+  public playCountdownTick() {
+    this.initContext();
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
+
+    const now = performance.now();
+    if (now - this.lastCountdownAt < 250) return;
+    this.lastCountdownAt = now;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    // Crisp arcade countdown beep ("ピッ")
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(523.25, t); // C5
+
+    gain.gain.setValueAtTime(0.32, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.13);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(t);
+    osc.stop(t + 0.14);
+  }
+
+  public playBattleStart() {
+    this.initContext();
+    if (!this.ctx || !this.sfxGain || this.isSfxMuted) return;
+
+    const now = performance.now();
+    if (now - this.lastBattleStartAt < 250) return;
+    this.lastBattleStartAt = now;
+
+    const t = this.ctx.currentTime;
+    // Energetic high chime ("ピーン！") for BATTLE! start
+    const freqs = [1046.5, 1318.5]; // C6 + E6 harmony
+    freqs.forEach((freq, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+
+      osc.type = i === 0 ? 'square' : 'triangle';
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(i === 0 ? 0.36 : 0.28, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.36);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain!);
+
+      osc.start(t);
+      osc.stop(t + 0.38);
+    });
   }
 
   // Procedural 8-bit Chiptune BGM

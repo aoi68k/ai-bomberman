@@ -641,6 +641,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       case 'wallThud':
         sounds.playWallThud();
         break;
+      case 'countdownTick':
+        sounds.playCountdownTick();
+        break;
+      case 'battleStart':
+        sounds.playBattleStart();
+        break;
     }
   };
 
