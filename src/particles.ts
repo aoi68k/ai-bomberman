@@ -1,5 +1,7 @@
 // Particle effects and screen shake for AI-Bomberman
 
+import { SerializedFxEvent } from './network';
+
 export interface Particle {
   x: number;
   y: number;
@@ -30,20 +32,75 @@ export class ParticleManager {
   public slashes: SlashEffect[] = [];
   public shakeDuration: number = 0;
   public shakeIntensity: number = 0;
+  public recordFxEvents: boolean = false;
+  private pendingFxEvents: SerializedFxEvent[] = [];
 
   public reset() {
     this.particles = [];
     this.slashes = [];
     this.shakeDuration = 0;
     this.shakeIntensity = 0;
+    this.pendingFxEvents = [];
+  }
+
+  private pushFxEvent(ev: SerializedFxEvent) {
+    if (!this.recordFxEvents) return;
+    if (this.pendingFxEvents.length < 64) {
+      this.pendingFxEvents.push(ev);
+    }
+  }
+
+  public consumePendingFxEvents(): SerializedFxEvent[] {
+    if (this.pendingFxEvents.length === 0) return [];
+    const events = this.pendingFxEvents;
+    this.pendingFxEvents = [];
+    return events;
+  }
+
+  public replayFxEvents(events?: SerializedFxEvent[]) {
+    if (!events || events.length === 0) return;
+    const prevRecord = this.recordFxEvents;
+    this.recordFxEvents = false;
+    try {
+      for (const ev of events) {
+        switch (ev.kind) {
+          case 'shake':
+            this.triggerShake(ev.intensity, ev.duration);
+            break;
+          case 'explosion':
+            this.addExplosionParticles(ev.x, ev.y, ev.count ?? 16);
+            break;
+          case 'debris':
+            this.addBlockDebris(ev.x, ev.y, ev.count ?? 12);
+            break;
+          case 'itemGet':
+            this.addItemGetParticles(ev.x, ev.y, ev.color ?? '#facc15');
+            break;
+          case 'slash':
+            this.addSlashEffect(
+              ev.x,
+              ev.y,
+              ev.angle,
+              ev.radius ?? 38,
+              ev.color ?? '#38bdf8',
+              Boolean(ev.flip)
+            );
+            break;
+        }
+      }
+    } finally {
+      this.recordFxEvents = prevRecord;
+    }
   }
 
   public triggerShake(intensity: number = 6, duration: number = 14) {
     this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
     this.shakeDuration = Math.max(this.shakeDuration, duration);
+    this.pushFxEvent({ kind: 'shake', intensity, duration });
   }
 
   public addExplosionParticles(px: number, py: number, count: number = 16) {
+    this.pushFxEvent({ kind: 'explosion', x: Math.round(px), y: Math.round(py), count });
     const colors = ['#f97316', '#fbbf24', '#f43f5e', '#ffffff', '#e11d48'];
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -66,6 +123,7 @@ export class ParticleManager {
   }
 
   public addBlockDebris(px: number, py: number, count: number = 12) {
+    this.pushFxEvent({ kind: 'debris', x: Math.round(px), y: Math.round(py), count });
     const brickColors = ['#b45309', '#92400e', '#78350f', '#d97706'];
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -88,6 +146,7 @@ export class ParticleManager {
   }
 
   public addItemGetParticles(px: number, py: number, color: string = '#facc15') {
+    this.pushFxEvent({ kind: 'itemGet', x: Math.round(px), y: Math.round(py), color });
     for (let i = 0; i < 14; i++) {
       const angle = (i / 14) * Math.PI * 2 + Math.random() * 0.2;
       const speed = 2.0 + Math.random() * 2.5;
@@ -116,6 +175,15 @@ export class ParticleManager {
     color: string = '#38bdf8',
     flip: boolean = false
   ) {
+    this.pushFxEvent({
+      kind: 'slash',
+      x: Math.round(px),
+      y: Math.round(py),
+      angle: Math.round(angle * 100) / 100,
+      radius,
+      color,
+      flip,
+    });
     const life = 12;
     this.slashes.push({
       x: px,

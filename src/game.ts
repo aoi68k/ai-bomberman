@@ -339,12 +339,14 @@ export class GameManager {
   public setRemoteInput(slotIndex: number, input: RemoteInputPayload) {
     const prev = this.remoteInputs.get(slotIndex);
     this.remoteInputs.set(slotIndex, {
-      dx: input.dx,
-      dy: input.dy,
+      dx: input.dx !== 0 ? input.dx : (prev && (prev as any)._unconsumedDir ? prev.dx : input.dx),
+      dy: input.dy !== 0 ? input.dy : (prev && (prev as any)._unconsumedDir ? prev.dy : input.dy),
       bomb: Boolean(prev?.bomb || input.bomb),
+      chainBomb: Boolean(prev?.chainBomb || input.chainBomb),
       skill: Boolean(prev?.skill || input.skill),
       ultra: Boolean(prev?.ultra || input.ultra),
-    });
+      ...(input.dx !== 0 || input.dy !== 0 ? { _unconsumedDir: true } : {}),
+    } as RemoteInputPayload);
   }
 
   private emitSound(event: SoundEventName) {
@@ -383,6 +385,8 @@ export class GameManager {
   }
 
   private update() {
+    this.particles.recordFxEvents = this.isOnlineHost;
+
     // STATE: TITLE, SETUP, or PAUSED (poll gamepad menu navigation)
     if (this.state === 'TITLE' || this.state === 'SETUP' || this.state === 'PAUSED') {
       const menuInput = this.input.getMenuInput();
@@ -399,10 +403,20 @@ export class GameManager {
     if (this.isOnlineGuest) {
       const guestInput = this.input.getPlayerInput(0);
       if (this.state === 'PLAYING' || this.state === 'COUNTDOWN') {
+        let chainBombPressed = false;
+        if (guestInput.bomb) {
+          const now = performance.now();
+          const lastTap = this.lastBombPressTime.get(0) || 0;
+          this.lastBombPressTime.set(0, now);
+          if (now - lastTap < 280) {
+            chainBombPressed = true;
+          }
+        }
         const payload: RemoteInputPayload = {
           dx: guestInput.dx,
           dy: guestInput.dy,
           bomb: guestInput.bomb,
+          chainBomb: chainBombPressed,
           skill: guestInput.skill,
           ultra: guestInput.ultra,
         };
@@ -410,12 +424,19 @@ export class GameManager {
           payload.dx !== this.lastGuestInputSent.dx ||
           payload.dy !== this.lastGuestInputSent.dy ||
           payload.bomb ||
+          payload.chainBomb ||
           payload.skill ||
           payload.ultra;
         this.syncTickCounter++;
         if (changed || this.syncTickCounter % 2 === 0) {
           this.onGuestSendInput?.(payload);
-          this.lastGuestInputSent = { ...payload, bomb: false, skill: false, ultra: false };
+          this.lastGuestInputSent = {
+            ...payload,
+            bomb: false,
+            chainBomb: false,
+            skill: false,
+            ultra: false,
+          };
         }
       }
       this.particles.update();
@@ -526,10 +547,12 @@ export class GameManager {
         const remote = this.remoteInputs.get(hp.config.id);
         if (!remote) continue;
         hInput = { ...remote };
-        // Consume one-shot button presses
+        // Consume one-shot button presses and unconsumed directional tap flag
         remote.bomb = false;
+        remote.chainBomb = false;
         remote.skill = false;
         remote.ultra = false;
+        (remote as any)._unconsumedDir = false;
       }
 
       if (!hp.isTackling && hp.slashSequenceTimer <= 0) {
@@ -538,7 +561,9 @@ export class GameManager {
           this.emitSound('kick');
         });
 
-        if (hInput.bomb) {
+        if (hInput.chainBomb && hp.chainBombAmmo > 0) {
+          this.tryUseChainBomb(hp);
+        } else if (hInput.bomb) {
           const now = performance.now();
           const lastPress = this.lastBombPressTime.get(hp.config.id) || 0;
           this.lastBombPressTime.set(hp.config.id, now);
@@ -552,13 +577,23 @@ export class GameManager {
         if (hInput.skill) {
           if (hp.chainBombAmmo > 0) {
             this.tryUseChainBomb(hp);
-          } else if (this.tryUseSkill(hp) && hp.isTackling) {
-            this.updatePlayerTackle(hp);
+          } else if (this.tryUseSkill(hp)) {
+            if (hp.isTackling) {
+              this.updatePlayerTackle(hp);
+            }
+            if (this.isOnlineHost) {
+              this.onHostSnapshot?.(this.exportSnapshot());
+            }
           }
         }
         if (hInput.ultra) {
-          if (this.tryUseUltra(hp) && hp.isTackling) {
-            this.updatePlayerTackle(hp);
+          if (this.tryUseUltra(hp)) {
+            if (hp.isTackling) {
+              this.updatePlayerTackle(hp);
+            }
+            if (this.isOnlineHost) {
+              this.onHostSnapshot?.(this.exportSnapshot());
+            }
           }
         }
       }
@@ -702,13 +737,8 @@ export class GameManager {
       .filter((p) => p.isAlive && Math.hypot(p.x - (player.tileX * 48 + 24), p.y - (player.tileY * 48 + 24)) < 36)
       .map((p) => p.config.id);
 
-    // Apply Mega Bomb power boost if active
-    let power = player.power;
-    if (player.hasMegaBomb) {
-      power = Math.min(8, player.power + 4);
-      player.hasMegaBomb = false;
-      this.particles.triggerShake(4, 8);
-    }
+    const isMega = player.hasMegaBomb;
+    const power = isMega ? Math.min(8, player.power + 4) : player.power;
 
     const bomb = this.bombManager.placeBomb(
       player.config.id,
@@ -719,6 +749,12 @@ export class GameManager {
     );
 
     if (bomb) {
+      if (isMega) {
+        player.hasMegaBomb = false;
+        (bomb as any).isMega = true;
+        this.particles.triggerShake(4, 8);
+        this.particles.addItemGetParticles(bomb.pixelX, bomb.pixelY, '#f59e0b');
+      }
       player.activeBombs++;
       player.lastPlacedBombId = bomb.id;
       if (player.ultraGauge < 10) {
@@ -852,6 +888,7 @@ export class GameManager {
           player.y = targetTy * 48 + 24;
           player.skillCooldownTimer = player.config.skillCooldown;
           sounds.playKick();
+          this.emitSound('kick');
           this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
           if (player.config.id === 0) this.input.vibrate(0, 100, 0.4, 0.2);
           return true;
@@ -878,6 +915,7 @@ export class GameManager {
         player.startTackle(dx, dy, 2 * 48, 5.0);
         player.skillCooldownTimer = player.config.skillCooldown;
         sounds.playKick();
+        this.emitSound('kick');
         this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
         if (player.config.id === 0) {
           this.input.vibrate(0, 120, 0.5, 0.2);
@@ -892,6 +930,7 @@ export class GameManager {
           targetBomb.timer = 1; // Detonate next tick
           player.skillCooldownTimer = player.config.skillCooldown;
           sounds.playHurry();
+          this.emitSound('hurry');
           this.particles.addItemGetParticles(targetBomb.pixelX, targetBomb.pixelY, '#ef4444');
           if (player.config.id === 0) this.input.vibrate(0, 150, 0.6, 0.3);
           return true;
@@ -904,6 +943,7 @@ export class GameManager {
         player.hasMegaBomb = true;
         player.skillCooldownTimer = player.config.skillCooldown;
         sounds.playHurry();
+        this.emitSound('hurry');
         this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
         if (player.config.id === 0) this.input.vibrate(0, 150, 0.5, 0.3);
         return true;
@@ -914,6 +954,7 @@ export class GameManager {
         player.shield = Math.min(player.shield + 1, 2);
         player.skillCooldownTimer = player.config.skillCooldown;
         sounds.playShieldBreak();
+        this.emitSound('shieldBreak');
         this.particles.addItemGetParticles(player.x, player.y, '#38bdf8');
         if (player.config.id === 0) this.input.vibrate(0, 150, 0.5, 0.3);
         return true;
@@ -951,10 +992,12 @@ export class GameManager {
         };
         const { dx, dy } = dirs[player.facing];
         player.skillCooldownTimer = player.config.skillCooldown;
+        const startX = player.x + dx * 16;
+        const startY = player.y + dy * 16;
         this.activeWindSlashes.push({
           ownerId: player.config.id,
-          x: player.x + dx * 16,
-          y: player.y + dy * 16,
+          x: startX,
+          y: startY,
           dx,
           dy,
           remainingDist: 2 * 48,
@@ -963,7 +1006,9 @@ export class GameManager {
           hitEnemies: new Set(),
         });
         sounds.playKick();
+        this.emitSound('kick');
         this.particles.addItemGetParticles(player.x, player.y, '#2dd4bf');
+        this.particles.addSlashEffect(startX, startY, Math.atan2(dy, dx), 34, '#2dd4bf', false);
         if (player.config.id === 0) {
           this.input.vibrate(0, 120, 0.5, 0.25);
         }
@@ -1014,6 +1059,7 @@ export class GameManager {
           player.invulnerableTimer = Math.max(player.invulnerableTimer, 60);
           player.ultraGauge = 0;
           sounds.playKick();
+          this.emitSound('kick');
           this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
           if (player.config.id === 0) this.input.vibrate(0, 150, 0.6, 0.3);
           this.broadcastStats();
@@ -1031,6 +1077,7 @@ export class GameManager {
           }
           player.ultraGauge = 0;
           sounds.playHurry();
+          this.emitSound('hurry');
           if (player.config.id === 0) this.input.vibrate(0, 200, 0.7, 0.4);
           this.broadcastStats();
           return true;
@@ -1045,10 +1092,12 @@ export class GameManager {
           .map((p) => p.config.id);
         const bomb = this.bombManager.placeBomb(player.config.id, player.tileX, player.tileY, 8, overlappingPlayers);
         if (bomb) {
+          (bomb as any).isMega = true;
           player.activeBombs++;
           player.lastPlacedBombId = bomb.id;
           player.ultraGauge = 0;
           sounds.playHurry();
+          this.emitSound('hurry');
           this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
           this.particles.triggerShake(4, 10);
           if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.4);
@@ -1063,6 +1112,7 @@ export class GameManager {
         player.invulnerableTimer = Math.max(player.invulnerableTimer, 120);
         player.ultraGauge = 0;
         sounds.playShieldBreak();
+        this.emitSound('shieldBreak');
         this.particles.addItemGetParticles(player.x, player.y, '#10b981');
         if (player.config.id === 0) this.input.vibrate(0, 180, 0.6, 0.3);
         this.broadcastStats();
@@ -1076,6 +1126,7 @@ export class GameManager {
         player.startTackle(dx, dy, 3 * 48, 6.0, true, 'none');
         player.ultraGauge = 0;
         sounds.playKick();
+        this.emitSound('kick');
         this.particles.addItemGetParticles(player.x, player.y, '#a855f7');
         if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.3);
         this.broadcastStats();
@@ -1094,8 +1145,10 @@ export class GameManager {
           remainingFrames: 240,
         });
         sounds.playHurry();
+        this.emitSound('hurry');
         this.particles.triggerShake(5, 16);
         this.particles.addItemGetParticles(centerTx * 48 + 24, centerTy * 48 + 24, '#2dd4bf');
+        this.particles.addSlashEffect(centerTx * 48 + 24, centerTy * 48 + 24, Math.atan2(dy, dx), 42, '#2dd4bf', false);
         if (player.config.id === 0) {
           this.input.vibrate(0, 240, 0.8, 0.45);
         }
@@ -1141,6 +1194,8 @@ export class GameManager {
           if (Math.hypot(other.x - ws.x, other.y - ws.y) < 34) {
             ws.hitEnemies.add(other.config.id);
             other.stun(120);
+            sounds.playKick();
+            this.emitSound('kick');
             this.particles.addItemGetParticles(other.x, other.y, '#2dd4bf');
             this.particles.addExplosionParticles(other.x, other.y, 6);
             this.particles.triggerShake(4, 8);
@@ -1182,6 +1237,8 @@ export class GameManager {
         if (other.isAlive && other.config.id !== zone.ownerId && other.stunTimer <= 0) {
           if (Math.abs(other.x - centerPx) <= 72 && Math.abs(other.y - centerPy) <= 72) {
             other.stun(120);
+            sounds.playKick();
+            this.emitSound('kick');
             this.particles.addItemGetParticles(other.x, other.y, '#2dd4bf');
             this.particles.addExplosionParticles(other.x, other.y, 5);
             if (other.config.id === 0) {
@@ -1215,6 +1272,7 @@ export class GameManager {
 
     this.particles.addSlashEffect(slashX, slashY, baseAngle + angleJitter, radius, isTempest ? '#7dd3fc' : '#38bdf8', flip);
     sounds.playKick();
+    this.emitSound('kick');
 
     // Hit check across 0..1 tiles forward (center at player and +1 tile forward)
     const hitPoints = [
@@ -1288,6 +1346,7 @@ export class GameManager {
     if (player.isColliding(nextX, nextY, this.map, this.bombManager)) {
       player.cancelTackle();
       sounds.playWallThud();
+      this.emitSound('wallThud');
       this.particles.addItemGetParticles(player.x, player.y, player.config.accentColor);
       this.particles.triggerShake(3, 8);
       return;
@@ -1328,6 +1387,7 @@ export class GameManager {
           this.particles.addExplosionParticles(other.x, other.y, 8);
           this.particles.triggerShake(5, 12);
           sounds.playKick();
+          this.emitSound('kick');
           if (player.config.id === 0) {
             this.input.vibrate(0, 200, 0.8, 0.4);
           }
@@ -1390,6 +1450,7 @@ export class GameManager {
     const px = x * 48 + 24;
     const py = y * 48 + 24;
     sounds.playWallThud();
+    this.emitSound('wallThud');
     this.particles.triggerShake(4, 8);
     this.particles.addBlockDebris(px, py, 14);
 
@@ -1400,6 +1461,7 @@ export class GameManager {
         p.shield = 0;
         p.hit();
         sounds.playPlayerDeath();
+        this.emitSound('death');
         this.particles.triggerShake(8, 20);
         this.particles.addExplosionParticles(p.x, p.y, 24);
         if (p.config.id === 0) {
@@ -1457,8 +1519,9 @@ export class GameManager {
       this.overheadTagTimer
     );
 
-    // Overlay state messages and active 3x3 tempest zones
+    // Overlay state messages, active wind slashes, and 3x3 tempest zones
     const ctx = this.canvas.getContext('2d')!;
+    this.drawWindSlashes(ctx);
     this.drawTempestZones(ctx);
 
     if (this.state === 'COUNTDOWN') {
@@ -1469,6 +1532,31 @@ export class GameManager {
       const bannerText = this.roundWinner ? `${this.roundWinner.config.name} WINS!` : 'DRAW GAME!';
       const bannerColor = this.roundWinner ? this.roundWinner.config.accentColor : '#94a3b8';
       this.drawBigBanner(ctx, bannerText, bannerColor, 'Press (A) / [R] for Next Round');
+    }
+  }
+
+  private drawWindSlashes(ctx: CanvasRenderingContext2D) {
+    if (this.activeWindSlashes.length === 0) return;
+    for (const ws of this.activeWindSlashes) {
+      const angle = Math.atan2(ws.dy, ws.dx);
+      ctx.save();
+      ctx.translate(ws.x, ws.y);
+      ctx.rotate(angle);
+      ctx.shadowColor = '#2dd4bf';
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = '#2dd4bf';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(0, 0, 26, -Math.PI * 0.45, Math.PI * 0.45);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(2, 0, 24, -Math.PI * 0.35, Math.PI * 0.35);
+      ctx.stroke();
+      ctx.restore();
     }
   }
 
@@ -1597,6 +1685,7 @@ export class GameManager {
         tick: ws.tick,
       })),
       tempestZones: this.activeTempestZones.map((tz) => ({ ...tz })),
+      fxEvents: this.isOnlineHost ? this.particles.consumePendingFxEvents() : [],
       playerSlots: this.playerSlots.map((s) => ({ ...s })),
       itemSettings: { ...this.itemSettings },
     };
@@ -1705,6 +1794,10 @@ export class GameManager {
     }
     if (snap.tempestZones) {
       this.activeTempestZones = snap.tempestZones.map((tz) => ({ ...tz }));
+    }
+
+    if (snap.fxEvents && snap.fxEvents.length > 0) {
+      this.particles.replayFxEvents(snap.fxEvents);
     }
 
     this.broadcastStats();

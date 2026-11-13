@@ -280,6 +280,20 @@ export class GameRenderer {
       ctx.translate(px, py);
       ctx.scale(pulseScale, pulseScale);
 
+      // Mega Bomb / Nova Bomb fiery golden-red aura
+      if ((bomb as any).isMega) {
+        const megaPulse = 0.7 + 0.3 * Math.sin(Date.now() / 90);
+        ctx.save();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 12 * megaPulse;
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // Floor shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
       ctx.beginPath();
@@ -497,6 +511,21 @@ export class GameRenderer {
       ctx.arc(0, -2, 22 + shieldPulse, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0;
+    }
+
+    // Mega Bomb Armed Aura if active
+    if (p.isAlive && p.hasMegaBomb) {
+      const megaPulse = Math.sin(Date.now() / 110) * 2.5;
+      ctx.save();
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 10;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.arc(0, -2, 24 + megaPulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
 
     // Tackle / Slash Rush Aura if active

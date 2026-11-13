@@ -8,6 +8,7 @@ export interface RemoteInputPayload {
   dx: number;
   dy: number;
   bomb: boolean;
+  chainBomb?: boolean;
   skill: boolean;
   ultra: boolean;
 }
@@ -88,6 +89,21 @@ export interface SerializedTempestZone {
   remainingFrames: number;
 }
 
+export type SerializedFxEvent =
+  | { kind: 'itemGet'; x: number; y: number; color?: string }
+  | { kind: 'explosion'; x: number; y: number; count?: number }
+  | { kind: 'debris'; x: number; y: number; count?: number }
+  | {
+      kind: 'slash';
+      x: number;
+      y: number;
+      angle: number;
+      radius?: number;
+      color?: string;
+      flip?: boolean;
+    }
+  | { kind: 'shake'; intensity: number; duration: number };
+
 export interface GameSnapshot {
   state: GameState;
   round: number;
@@ -105,6 +121,7 @@ export interface GameSnapshot {
   players: SerializedPlayer[];
   windSlashes: SerializedWindSlash[];
   tempestZones: SerializedTempestZone[];
+  fxEvents?: SerializedFxEvent[];
   playerSlots?: PlayerSlotConfig[];
   itemSettings?: ItemSettings;
 }
@@ -117,6 +134,7 @@ export type SoundEventName =
   | 'hurry'
   | 'death'
   | 'shieldBreak'
+  | 'wallThud'
   | 'roundOver';
 
 export type NetMessage =
@@ -714,11 +732,12 @@ export class NetworkManager {
 
   public broadcastSnapshot(snapshot: GameSnapshot) {
     if (this.role !== 'HOST') return;
+    const hasFx = Boolean(snapshot.fxEvents && snapshot.fxEvents.length > 0);
     for (const conn of this.guestConns.values()) {
       if (conn.open) {
-        // Drop snapshot if WebRTC data channel buffer is congested to avoid latency buildup
+        // Drop snapshot if WebRTC data channel buffer is congested to avoid latency buildup (unless it carries FX events)
         const dc = (conn as any).dataChannel as RTCDataChannel | undefined;
-        if (dc && dc.bufferedAmount > 8192) {
+        if (!hasFx && dc && dc.bufferedAmount > 16384) {
           continue;
         }
         conn.send({ type: 'STATE', snapshot });

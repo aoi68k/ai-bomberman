@@ -638,6 +638,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       case 'roundOver':
         sounds.playWin();
         break;
+      case 'wallThud':
+        sounds.playWallThud();
+        break;
     }
   };
 
