@@ -44,14 +44,16 @@ html, body {
 
 .top-bar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   width: 100%;
   max-width: 720px;
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: 12px;
-  padding: 10px 16px;
+  padding: 10px 14px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
@@ -98,7 +100,8 @@ html, body {
 
 .top-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .action-btn {
@@ -511,4 +514,50 @@ html, body {
 .bomb-touch-btn:active {
   transform: scale(0.92);
   background: #dc2626;
+}
+
+/* Fullscreen & Popup Window Modes */
+:fullscreen body,
+:-webkit-full-screen body {
+  justify-content: center;
+  overflow: hidden;
+}
+
+:fullscreen .game-container,
+:-webkit-full-screen .game-container {
+  max-width: 100vw;
+  height: 100vh;
+  justify-content: center;
+  padding: 8px 16px;
+  gap: 8px;
+}
+
+:fullscreen .top-bar,
+:fullscreen .gamepad-bar,
+:fullscreen .hud-players,
+:-webkit-full-screen .top-bar,
+:-webkit-full-screen .gamepad-bar,
+:-webkit-full-screen .hud-players {
+  max-width: min(960px, 95vw);
+}
+
+:fullscreen .canvas-wrapper,
+:-webkit-full-screen .canvas-wrapper {
+  width: auto;
+  height: calc(100vh - 210px);
+  max-width: min(95vw, calc((100vh - 210px) * 720 / 624));
+}
+
+:fullscreen .controls-guide,
+:-webkit-full-screen .controls-guide {
+  display: none;
+}
+
+body.popup-mode .controls-guide {
+  display: none;
+}
+
+body.popup-mode .game-container {
+  padding: 8px 12px;
+  gap: 8px;
 }

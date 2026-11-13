@@ -23,6 +23,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnBgm = document.getElementById('btnBgm') as HTMLButtonElement;
   const btnSfx = document.getElementById('btnSfx') as HTMLButtonElement;
   const btnReset = document.getElementById('btnReset') as HTMLButtonElement;
+  const btnFullscreen = document.getElementById('btnFullscreen') as HTMLButtonElement;
+  const btnPopup = document.getElementById('btnPopup') as HTMLButtonElement;
   const selComCount = document.getElementById('selComCount') as HTMLSelectElement;
   const gamepadStatus = document.getElementById('gamepadStatus') as HTMLElement;
   const gamepadIndicator = document.getElementById('gamepadIndicator') as HTMLElement;
@@ -183,6 +185,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     const target = e.target as HTMLSelectElement;
     game.setComCount(parseInt(target.value, 10));
     game.startRound();
+  });
+
+  // Fullscreen toggle
+  const updateFullscreenBtn = () => {
+    if (!btnFullscreen) return;
+    const isFs = Boolean(document.fullscreenElement);
+    btnFullscreen.textContent = isFs ? '✕ 解除' : '⛶ 全画面';
+    btnFullscreen.style.borderColor = isFs ? 'var(--accent-cyan)' : '#334155';
+  };
+
+  btnFullscreen?.addEventListener('click', async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch {
+      // Ignore fullscreen errors if blocked by browser/iframe policy
+    }
+  });
+  document.addEventListener('fullscreenchange', updateFullscreenBtn);
+
+  // Popup Window mode
+  const isPopup =
+    new URLSearchParams(window.location.search).get('popup') === '1' ||
+    Boolean(window.opener && window.opener !== window);
+
+  if (isPopup) {
+    document.body.classList.add('popup-mode');
+    if (btnPopup) btnPopup.style.display = 'none';
+  }
+
+  btnPopup?.addEventListener('click', () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('popup', '1');
+    const win = window.open(
+      url.toString(),
+      'ai_bomberman_popup',
+      'width=820,height=860,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
+    );
+    if (!win) {
+      alert('ポップアップがブロックされました。ブラウザのポップアップ許可設定をご確認ください。');
+    } else {
+      win.focus();
+    }
   });
 
   // Mobile On-Screen Controls
