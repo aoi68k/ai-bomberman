@@ -2,6 +2,7 @@
 
 import Peer, { DataConnection } from 'peerjs';
 import { PlayerSlotConfig, GameState } from './game';
+import { ItemType } from './constants';
 
 export interface RemoteInputPayload {
   dx: number;
@@ -15,6 +16,7 @@ export interface SerializedPlayer {
   id: number;
   x: number;
   y: number;
+  speed: number;
   facing: 'up' | 'down' | 'left' | 'right';
   animFrame: number;
   isMoving: boolean;
@@ -34,6 +36,14 @@ export interface SerializedPlayer {
   tackleSlashMode: 'none' | 'skill_rush' | 'ultra_tempest';
   tackleSlashTick: number;
   slashSequenceTimer: number;
+}
+
+export interface SerializedItem {
+  id: number;
+  tileX: number;
+  tileY: number;
+  type: ItemType;
+  spawnTime: number;
 }
 
 export interface SerializedBomb {
@@ -88,7 +98,7 @@ export interface GameSnapshot {
   scores: number[];
   winnerId: number | null;
   grid: number[][];
-  activeItems: Array<{ id: number; tileX: number; tileY: number; type: number }>;
+  activeItems: SerializedItem[];
   bombs: SerializedBomb[];
   explosions: SerializedExplosion[];
   players: SerializedPlayer[];
@@ -103,6 +113,7 @@ export type SoundEventName =
   | 'kick'
   | 'hurry'
   | 'death'
+  | 'shieldBreak'
   | 'roundOver';
 
 export type NetMessage =
@@ -358,7 +369,16 @@ export class NetworkManager {
 
   public broadcastSnapshot(snapshot: GameSnapshot) {
     if (this.role !== 'HOST') return;
-    this.broadcast({ type: 'STATE', snapshot });
+    for (const conn of this.guestConns.values()) {
+      if (conn.open) {
+        // Drop snapshot if WebRTC data channel buffer is congested to avoid latency buildup
+        const dc = (conn as any).dataChannel as RTCDataChannel | undefined;
+        if (dc && dc.bufferedAmount > 8192) {
+          continue;
+        }
+        conn.send({ type: 'STATE', snapshot });
+      }
+    }
   }
 
   public broadcastSound(event: SoundEventName) {

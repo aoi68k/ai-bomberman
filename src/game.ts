@@ -348,7 +348,7 @@ export class GameManager {
     // Online Guest: only send local input to Host and animate particles
     if (this.isOnlineGuest) {
       const guestInput = this.input.getPlayerInput(0);
-      if (this.state === 'PLAYING') {
+      if (this.state === 'PLAYING' || this.state === 'COUNTDOWN') {
         const payload: RemoteInputPayload = {
           dx: guestInput.dx,
           dy: guestInput.dy,
@@ -363,7 +363,7 @@ export class GameManager {
           payload.skill ||
           payload.ultra;
         this.syncTickCounter++;
-        if (changed || this.syncTickCounter % 3 === 0) {
+        if (changed || this.syncTickCounter % 2 === 0) {
           this.onGuestSendInput?.(payload);
           this.lastGuestInputSent = { ...payload, bomb: false, skill: false, ultra: false };
         }
@@ -547,6 +547,10 @@ export class GameManager {
         if (owner && owner.activeBombs > 0) {
           owner.activeBombs--;
         }
+
+        if (this.isOnlineHost) {
+          this.onHostSnapshot?.(this.exportSnapshot());
+        }
       },
       (blockTx, blockTy) => {
         // Soft block destroyed effect
@@ -563,7 +567,11 @@ export class GameManager {
       if (itemType) {
         p.applyItem(itemType);
         sounds.playItemGet();
+        this.emitSound('pickup');
         this.particles.addItemGetParticles(p.x, p.y);
+        if (this.isOnlineHost) {
+          this.onHostSnapshot?.(this.exportSnapshot());
+        }
       }
     }
 
@@ -575,6 +583,7 @@ export class GameManager {
         const isFatal = p.hit();
         if (isFatal) {
           sounds.playPlayerDeath();
+          this.emitSound('death');
           this.particles.triggerShake(8, 20);
           this.particles.addExplosionParticles(p.x, p.y, 24);
 
@@ -582,12 +591,19 @@ export class GameManager {
             // Strong vibration on player 1 defeat
             this.input.vibrate(0, 450, 1.0, 0.8);
           }
+          if (this.isOnlineHost) {
+            this.onHostSnapshot?.(this.exportSnapshot());
+          }
         } else {
           // Shield broke
           sounds.playShieldBreak();
+          this.emitSound('shieldBreak');
           this.particles.addItemGetParticles(p.x, p.y, '#38bdf8');
           if (p.config.id === 0) {
             this.input.vibrate(0, 180, 0.5, 0.3);
+          }
+          if (this.isOnlineHost) {
+            this.onHostSnapshot?.(this.exportSnapshot());
           }
         }
       }
@@ -608,6 +624,14 @@ export class GameManager {
 
     // End frame input cleanup
     this.input.endFrame();
+
+    // Online Host: Broadcast battle state to all connected guests
+    if (this.isOnlineHost) {
+      this.syncTickCounter++;
+      if (this.syncTickCounter % 2 === 0 || this.state === 'ROUND_OVER') {
+        this.onHostSnapshot?.(this.exportSnapshot());
+      }
+    }
   }
 
   private tryPlaceBomb(player: Player): boolean {
@@ -642,6 +666,10 @@ export class GameManager {
         player.ultraGauge = Math.min(10, player.ultraGauge + 1);
       }
       sounds.playBombDrop();
+      if (this.isOnlineHost) {
+        this.emitSound('placeBomb');
+        this.onHostSnapshot?.(this.exportSnapshot());
+      }
       this.broadcastStats();
       return true;
     }
@@ -1250,6 +1278,10 @@ export class GameManager {
       }
 
       this.broadcastStats();
+      if (this.isOnlineHost) {
+        this.emitSound('roundOver');
+        this.onHostSnapshot?.(this.exportSnapshot());
+      }
     }
   }
 
@@ -1374,9 +1406,9 @@ export class GameManager {
         pixelY: b.pixelY,
         ownerId: b.ownerId,
         power: b.power,
-        fuseTimer: b.fuseTimer,
-        maxFuseTime: b.maxFuseTime,
-        isMega: Boolean(b.isMega),
+        fuseTimer: (b as any).timer ?? 150,
+        maxFuseTime: 150,
+        isMega: Boolean((b as any).isMega),
         isSliding: b.isSliding,
         slideDx: b.slideDx,
         slideDy: b.slideDy,
@@ -1386,6 +1418,7 @@ export class GameManager {
         id: p.config.id,
         x: p.x,
         y: p.y,
+        speed: p.speed,
         facing: p.facing,
         animFrame: p.animFrame,
         isMoving: p.isMoving,
@@ -1419,6 +1452,12 @@ export class GameManager {
   }
 
   public applySnapshot(snap: GameSnapshot) {
+    if (!snap) return;
+
+    if (this.players.length === 0) {
+      this.setupPlayers();
+    }
+
     this.state = snap.state;
     this.round = snap.round;
     this.roundTimeSeconds = snap.roundTimeSeconds;
@@ -1434,47 +1473,71 @@ export class GameManager {
     if (snap.grid && snap.grid.length > 0) {
       this.map.grid = snap.grid.map((row) => [...row]);
     }
-    this.map.activeItems = snap.activeItems.map((it) => ({ ...it }));
-
-    this.bombManager.bombs = snap.bombs.map((b) => ({
-      ...b,
-      ignoredPlayerIds: new Set<number>(),
-    }));
-    this.bombManager.explosions.cells = snap.explosions.map((c) => ({ ...c }));
-
-    for (const sp of snap.players) {
-      const p = this.players.find((pl) => pl.config.id === sp.id);
-      if (!p) continue;
-      p.x = sp.x;
-      p.y = sp.y;
-      p.facing = sp.facing;
-      p.animFrame = sp.animFrame;
-      p.isMoving = sp.isMoving;
-      p.isAlive = sp.isAlive;
-      p.deathTimer = sp.deathTimer;
-      p.stunTimer = sp.stunTimer;
-      p.invulnerableTimer = sp.invulnerableTimer;
-      p.maxBombs = sp.maxBombs;
-      p.activeBombs = sp.activeBombs;
-      p.power = sp.power;
-      p.hasKick = sp.hasKick;
-      p.shield = sp.shield;
-      p.skillCooldownTimer = sp.skillCooldownTimer;
-      p.ultraGauge = sp.ultraGauge;
-      p.hasMegaBomb = sp.hasMegaBomb;
-      p.isTackling = sp.isTackling;
-      p.tackleSlashMode = sp.tackleSlashMode;
-      p.tackleSlashTick = sp.tackleSlashTick;
-      p.slashSequenceTimer = sp.slashSequenceTimer;
+    if (snap.activeItems) {
+      this.map.activeItems = snap.activeItems.map((it) => ({ ...it }));
     }
 
-    this.activeWindSlashes = snap.windSlashes.map((ws) => ({
-      ...ws,
-      remainingDist: 0,
-      speed: 0,
-      hitEnemies: new Set<number>(),
-    }));
-    this.activeTempestZones = snap.tempestZones.map((tz) => ({ ...tz }));
+    if (snap.bombs) {
+      this.bombManager.bombs = snap.bombs.map((b) => {
+        const bomb = new Bomb(b.id, b.ownerId, b.tileX, b.tileY, b.power);
+        bomb.pixelX = b.pixelX;
+        bomb.pixelY = b.pixelY;
+        bomb.timer = b.fuseTimer ?? 150;
+        bomb.isSliding = b.isSliding;
+        bomb.slideDx = b.slideDx;
+        bomb.slideDy = b.slideDy;
+        (bomb as any).isMega = b.isMega;
+        return bomb;
+      });
+    }
+
+    if (snap.explosions) {
+      if (snap.explosions.length > 0 && this.bombManager.explosions.cells.length === 0) {
+        this.particles.triggerShake(4, 10);
+      }
+      this.bombManager.explosions.cells = snap.explosions.map((c) => ({ ...c }));
+    }
+
+    if (snap.players) {
+      for (const sp of snap.players) {
+        const p = this.players.find((pl) => pl.config.id === sp.id);
+        if (!p) continue;
+        p.x = sp.x;
+        p.y = sp.y;
+        p.speed = sp.speed ?? p.speed;
+        p.facing = sp.facing;
+        p.animFrame = sp.animFrame;
+        p.isMoving = sp.isMoving;
+        p.isAlive = sp.isAlive;
+        p.deathTimer = sp.deathTimer;
+        p.stunTimer = sp.stunTimer;
+        p.invulnerableTimer = sp.invulnerableTimer;
+        p.maxBombs = sp.maxBombs;
+        p.activeBombs = sp.activeBombs;
+        p.power = sp.power;
+        p.hasKick = sp.hasKick;
+        p.shield = sp.shield;
+        p.skillCooldownTimer = sp.skillCooldownTimer;
+        p.ultraGauge = sp.ultraGauge;
+        p.hasMegaBomb = sp.hasMegaBomb;
+        p.isTackling = sp.isTackling;
+        p.tackleSlashMode = sp.tackleSlashMode;
+        p.tackleSlashTick = sp.tackleSlashTick;
+        p.slashSequenceTimer = sp.slashSequenceTimer;
+      }
+    }
+
+    if (snap.windSlashes) {
+      this.activeWindSlashes = snap.windSlashes.map((ws) => ({
+        ...ws,
+        remainingDist: 0,
+        speed: 0,
+        hitEnemies: new Set<number>(),
+      }));
+    }
+    if (snap.tempestZones) {
+      this.activeTempestZones = snap.tempestZones.map((tz) => ({ ...tz }));
+    }
 
     this.broadcastStats();
   }

@@ -316,6 +316,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       await net.createRoom(
         () => draftSlots,
+        () => playerCursors,
         (slotIdx) => {
           if (draftSlots[slotIdx]) {
             draftSlots[slotIdx].control = 'REMOTE';
@@ -352,7 +353,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   net.onRemoteCharSelect = (slotIdx, charId) => {
     if (draftSlots[slotIdx]) {
       draftSlots[slotIdx].charId = charId;
-      net.broadcastLobbySync(draftSlots);
+      net.broadcastLobbySync(draftSlots, playerCursors);
       renderSetupGrid();
     }
   };
@@ -388,6 +389,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   net.onGuestSnapshot = (snap) => {
+    if (snap.state === 'PLAYING' || snap.state === 'COUNTDOWN') {
+      titleScreen.classList.add('hidden');
+      setupScreen.classList.add('hidden');
+    }
     game.applySnapshot(snap);
   };
 
@@ -405,8 +410,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       case 'placeBomb':
         sounds.playBombDrop();
         break;
+      case 'pickup':
+        sounds.playItemGet();
+        break;
       case 'death':
-        sounds.playDeath();
+        sounds.playPlayerDeath();
+        break;
+      case 'shieldBreak':
+        sounds.playShieldBreak();
         break;
       case 'roundOver':
         sounds.playWin();
@@ -805,7 +816,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         game.togglePause();
         break;
       case 'retry':
+        if (net.role === 'GUEST') return;
         game.startRound();
+        if (net.role === 'HOST') {
+          net.broadcastSnapshot(game.exportSnapshot());
+        }
         break;
       case 'bgm':
         toggleBgm();
@@ -817,9 +832,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         toggleVibration();
         break;
       case 'setup':
+        if (net.role === 'GUEST') return;
         showSetupScreen();
         break;
       case 'title':
+        if (net.role === 'GUEST') {
+          net.disconnect();
+        }
         showTitleScreen();
         break;
       case 'fullscreen':
@@ -851,7 +870,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (game.state === 'TITLE' || game.state === 'SETUP') {
       startBattleFromSetup();
     } else {
+      if (net.role === 'GUEST') return;
       game.startRound();
+      if (net.role === 'HOST') {
+        net.broadcastSnapshot(game.exportSnapshot());
+      }
     }
   });
 
