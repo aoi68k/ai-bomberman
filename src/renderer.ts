@@ -548,12 +548,83 @@ export class GameRenderer {
       }
     }
 
+    // Ready Fireflies orbiting around the player:
+    // Yellow = Skill ready, Red = Ultra skill ready, Hidden = On cooldown
+    if (p.isAlive) {
+      const now = Date.now();
+      const baseAngle = now / 520 + p.config.id * 1.7;
+      if (p.skillCooldownTimer <= 0) {
+        this.drawFirefly(ctx, baseAngle, now, '#facc15', '#fef08a', 0);
+      }
+      if (p.ultraCooldownTimer <= 0) {
+        this.drawFirefly(ctx, baseAngle + Math.PI, now, '#ef4444', '#fca5a5', 1.9);
+      }
+    }
+
     // Name Tag over head
     ctx.font = 'bold 9px sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.textAlign = 'center';
     ctx.fillText(p.config.name, 0, p.stunTimer > 0 ? -42 : -32);
 
+    ctx.restore();
+  }
+
+  private drawFirefly(
+    ctx: CanvasRenderingContext2D,
+    angle: number,
+    now: number,
+    color: string,
+    coreColor: string,
+    phaseOffset: number
+  ) {
+    const rx = 22;
+    const ry = 13;
+    const baseY = -6;
+    const pulse = 0.72 + 0.28 * Math.sin(now / 180 + phaseOffset);
+
+    const getPos = (a: number, t: number) => ({
+      x: Math.cos(a) * rx,
+      y: baseY + Math.sin(a) * ry + Math.sin(t * 2.2 + phaseOffset) * 3.5,
+    });
+
+    // Subtle trailing particles behind the firefly
+    for (let i = 2; i >= 1; i--) {
+      const trailPos = getPos(angle - i * 0.22, now / 520 - i * 0.22);
+      ctx.save();
+      ctx.globalAlpha = (0.35 - i * 0.1) * pulse;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(trailPos.x, trailPos.y, 2.5 - i * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    const pos = getPos(angle, now / 520);
+    ctx.save();
+    // Outer soft glow
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 * pulse;
+    ctx.globalAlpha = 0.45 * pulse;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 5.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bright firefly body
+    ctx.globalAlpha = 0.95 * pulse;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 3.0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner white-hot core
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = coreColor;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }

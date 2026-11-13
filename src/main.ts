@@ -99,14 +99,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const stars = '⭐'.repeat(stats.scores[p.config.id] || 0);
 
-      const skillSecs = Math.ceil(p.skillCooldownTimer / 60);
-      const skillText = p.skillCooldownTimer > 0 ? `⚡ ⏳${skillSecs}s` : `⚡ READY`;
-      const skillColor = p.skillCooldownTimer > 0 ? '#94a3b8' : '#10b981';
-
-      const ultraSecs = Math.ceil(p.ultraCooldownTimer / 60);
-      const ultraText = p.ultraCooldownTimer > 0 ? `🌟 ⏳${ultraSecs}s` : `🌟 READY`;
-      const ultraColor = p.ultraCooldownTimer > 0 ? '#94a3b8' : '#38bdf8';
-
       card.innerHTML = `
         <div class="player-card-header">
           <span class="p-name" style="color: ${p.config.accentColor}">${p.config.name}</span>
@@ -118,10 +110,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
           ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
           ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 700; margin-top: 2px; gap: 4px;">
-          <span style="color: ${skillColor};" title="必殺技 (X / E)">${skillText}</span>
-          <span style="color: ${ultraColor};" title="超技 (Y / Q)">${ultraText}</span>
         </div>
       `;
       hudPlayers.appendChild(card);
