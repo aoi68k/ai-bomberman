@@ -15,8 +15,6 @@
           <h1 class="game-title">AI BOMBER</h1>
         </div>
 
-        <div id="timerBadge" class="timer-badge">2:00</div>
-
         <div class="top-actions">
           <button id="btnTitle" class="action-btn" title="タイトル画面へ戻る">🏠 タイトル</button>
           <button id="btnSetup" class="action-btn highlight-btn" title="プレイヤーセットアップ画面へ">👥 対戦設定</button>
@@ -43,6 +41,15 @@
       <!-- Main Game Arena Canvas -->
       <div class="canvas-wrapper">
         <canvas id="gameCanvas" width="720" height="624"></canvas>
+
+        <!-- In-Game Overlay: Top Timer & Pause Button -->
+        <div id="timerBadge" class="timer-badge hud-timer hidden">2:00</div>
+        <button id="btnPauseOverlay" class="hud-pause-btn hidden" title="ポーズメニュー (P / Start)">⏸</button>
+
+        <!-- In-Game Overlay: Bottom 4 Players Status Cards -->
+        <div id="hudPlayers" class="hud-players hud-players-overlay hidden">
+          <!-- Dynamically populated by main.ts -->
+        </div>
 
         <!-- 1. Game Title Screen -->
         <div id="titleScreen" class="screen-overlay">
@@ -72,11 +79,24 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- HUD: 4 Players Status Cards -->
-      <div id="hudPlayers" class="hud-players">
-        <!-- Dynamically populated by main.ts -->
+        <!-- 3. Pause Menu Overlay -->
+        <div id="pauseScreen" class="screen-overlay hidden">
+          <div class="pause-box">
+            <h2>⏸ PAUSED</h2>
+            <div id="pauseMenuList" class="pause-menu-list">
+              <button type="button" class="pause-menu-btn" data-action="resume">▶ ゲーム再開</button>
+              <button type="button" class="pause-menu-btn" data-action="retry">🔄 リトライ</button>
+              <button type="button" class="pause-menu-btn" data-action="bgm" id="pauseBtnBgm">🎵 BGM: OFF</button>
+              <button type="button" class="pause-menu-btn" data-action="sfx" id="pauseBtnSfx">🔇 SE: OFF</button>
+              <button type="button" class="pause-menu-btn" data-action="vibration" id="pauseBtnVibration">📴 振動: OFF</button>
+              <button type="button" class="pause-menu-btn" data-action="setup">👥 対戦設定</button>
+              <button type="button" class="pause-menu-btn" data-action="title">🏠 タイトルへ</button>
+              <button type="button" class="pause-menu-btn" data-action="fullscreen" id="pauseBtnFullscreen">⛶ 全画面切替</button>
+            </div>
+            <div class="pause-hint">十字キー:選択 / A:決定 / B・Start・P:再開</div>
+          </div>
+        </div>
       </div>
 
       <!-- Controls Guide -->

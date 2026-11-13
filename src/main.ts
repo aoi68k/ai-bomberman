@@ -33,6 +33,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const titleScreen = document.getElementById('titleScreen') as HTMLElement;
   const setupScreen = document.getElementById('setupScreen') as HTMLElement;
+  const pauseScreen = document.getElementById('pauseScreen') as HTMLElement;
+  const btnPauseOverlay = document.getElementById('btnPauseOverlay') as HTMLButtonElement;
+  const pauseMenuBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('#pauseMenuList .pause-menu-btn'));
+  const pauseBtnBgm = document.getElementById('pauseBtnBgm') as HTMLButtonElement;
+  const pauseBtnSfx = document.getElementById('pauseBtnSfx') as HTMLButtonElement;
+  const pauseBtnVibration = document.getElementById('pauseBtnVibration') as HTMLButtonElement;
+  const pauseBtnFullscreen = document.getElementById('pauseBtnFullscreen') as HTMLButtonElement;
   const setupGrid = document.getElementById('setupGrid') as HTMLElement;
   const setupValidationMsg = document.getElementById('setupValidationMsg') as HTMLElement;
   const btnStartSetup = document.getElementById('btnStartSetup') as HTMLButtonElement;
@@ -42,6 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const charList = Object.values(CHARACTERS);
   const draftSlots = game.playerSlots.map((s) => ({ ...s }));
   let setupFocus = 0; // 0..3: player slots, 4: back to title, 5: battle start
+  let pauseFocus = 0; // 0..7: pause menu buttons
   let showPadFocus = false;
 
   const setSlotControl = (idx: number, nextCtrl: '1P' | 'COM' | 'OFF') => {
@@ -172,10 +180,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (game.state === 'TITLE' && (e.code === 'Enter' || e.code === 'Space')) {
       e.preventDefault();
       showSetupScreen();
+    } else if (game.state === 'PAUSED' && (e.code === 'KeyP' || e.code === 'Escape')) {
+      e.preventDefault();
+      game.togglePause();
     }
   });
 
-  // Gamepad navigation for Title & Setup screens
+  const renderPauseFocus = () => {
+    pauseMenuBtns.forEach((btn, idx) => {
+      btn.classList.toggle('pad-focused', showPadFocus && pauseFocus === idx);
+    });
+  };
+
+  // Gamepad navigation for Title, Setup, and Pause screens
   game.onMenuInput = (input: MenuInput) => {
     const hasInput =
       input.dx !== 0 ||
@@ -194,6 +211,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         showPadFocus = true;
         showSetupScreen();
       }
+      return;
+    }
+
+    if (game.state === 'PAUSED') {
+      showPadFocus = true;
+      if (input.start || input.cancel) {
+        game.togglePause();
+        return;
+      }
+
+      // 2-column grid of pauseMenuBtns
+      if (input.dx !== 0) {
+        if (pauseFocus % 2 === 0 && input.dx > 0 && pauseFocus + 1 < pauseMenuBtns.length) {
+          pauseFocus += 1;
+        } else if (pauseFocus % 2 === 1 && input.dx < 0) {
+          pauseFocus -= 1;
+        }
+      }
+      if (input.dy !== 0) {
+        const nextIdx = pauseFocus + input.dy * 2;
+        if (nextIdx >= 0 && nextIdx < pauseMenuBtns.length) {
+          pauseFocus = nextIdx;
+        }
+      }
+
+      if (input.confirm) {
+        const action = pauseMenuBtns[pauseFocus]?.dataset.action;
+        if (action) {
+          handlePauseAction(action);
+        }
+      }
+
+      renderPauseFocus();
       return;
     }
 
@@ -250,32 +300,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  // Render player cards
+  // Render player cards (with face icons, overlaid on bottom wall row)
   const updatePlayerCards = (stats: GameStats) => {
     hudPlayers.innerHTML = '';
     game.players.forEach((p) => {
       const card = document.createElement('div');
       card.className = `player-card ${p.isAlive ? '' : 'dead'}`;
-      card.style.borderLeft = `4px solid ${p.config.accentColor}`;
+      card.style.borderLeft = `3px solid ${p.config.accentColor}`;
+
+      const portraitImg = assets.getImage(`portrait_${p.config.charId}` as any);
+      const portraitSrc = portraitImg
+        ? portraitImg.src
+        : `assets/images/characters/${p.config.charId}/idle.png`;
 
       const stars = '⭐'.repeat(stats.scores[p.config.id] || 0);
       const gaugePct = Math.min(100, (p.ultraGauge / 10) * 100);
       const isUltraReady = p.ultraGauge >= 10;
 
       card.innerHTML = `
-        <div class="player-card-header">
-          <span class="p-name" style="color: ${p.config.accentColor}">${p.config.name}</span>
-          <span class="p-score">${stars}</span>
-        </div>
-        <div class="p-stats">
-          <span class="p-stat-item" title="Bombs">💣${p.maxBombs}</span>
-          <span class="p-stat-item" title="Fire Power">🔥${p.power}</span>
-          <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
-          ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
-          ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
-        </div>
-        <div title="超技ゲージ: ${p.ultraGauge}/10 (ボム設置で+1)" style="width: 100%; height: 4px; background: #0f172a; border-radius: 2px; overflow: hidden; margin-top: 2px;">
-          <div style="width: ${gaugePct}%; height: 100%; background: ${isUltraReady ? '#ef4444' : '#38bdf8'}; box-shadow: ${isUltraReady ? '0 0 6px #ef4444' : 'none'}; transition: width 0.15s ease;"></div>
+        <img class="p-face" src="${portraitSrc}" alt="${p.config.name}" style="border-color: ${p.config.accentColor}" />
+        <div class="p-body">
+          <div class="player-card-header">
+            <span class="p-name" style="color: ${p.config.accentColor}">${p.config.name}</span>
+            <span class="p-score">${stars}</span>
+          </div>
+          <div class="p-stats">
+            <span class="p-stat-item" title="Bombs">💣${p.maxBombs}</span>
+            <span class="p-stat-item" title="Fire Power">🔥${p.power}</span>
+            <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
+            ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
+            ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
+          </div>
+          <div title="超技ゲージ: ${p.ultraGauge}/10 (ボム設置で+1)" style="width: 100%; height: 3px; background: #020617; border-radius: 2px; overflow: hidden; margin-top: 1px;">
+            <div style="width: ${gaugePct}%; height: 100%; background: ${isUltraReady ? '#ef4444' : '#38bdf8'}; box-shadow: ${isUltraReady ? '0 0 6px #ef4444' : 'none'}; transition: width 0.15s ease;"></div>
+          </div>
         </div>
       `;
       hudPlayers.appendChild(card);
@@ -292,6 +350,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       timerBadge.classList.add('hurry');
     } else {
       timerBadge.classList.remove('hurry');
+    }
+
+    const showInGameHud =
+      stats.state === 'COUNTDOWN' ||
+      stats.state === 'PLAYING' ||
+      stats.state === 'ROUND_OVER' ||
+      stats.state === 'PAUSED';
+    timerBadge.classList.toggle('hidden', !showInGameHud);
+    hudPlayers.classList.toggle('hidden', !showInGameHud);
+    btnPauseOverlay.classList.toggle('hidden', !showInGameHud);
+
+    const isPaused = stats.state === 'PAUSED';
+    const wasHidden = pauseScreen.classList.contains('hidden');
+    pauseScreen.classList.toggle('hidden', !isPaused);
+    if (isPaused) {
+      if (wasHidden) {
+        pauseFocus = 0;
+        showPadFocus = game.input.getConnectedGamepads().some((p) => p.connected);
+      }
+      renderPauseFocus();
     }
 
     updatePlayerCards(stats);
@@ -324,43 +402,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateGamepadUI(pads);
   }, 300);
 
-  // Button Controls
-  btnBgm.addEventListener('click', () => {
+  // Shared Toggle Helpers (Header + Pause Menu)
+  const toggleBgm = () => {
     const isPlaying = sounds.toggleBGM();
-    btnBgm.textContent = isPlaying ? '🎵 BGM: ON' : '🎵 BGM: OFF';
+    const label = isPlaying ? '🎵 BGM: ON' : '🎵 BGM: OFF';
+    btnBgm.textContent = label;
     btnBgm.style.borderColor = isPlaying ? 'var(--accent-emerald)' : '#334155';
-  });
-
-  btnSfx.addEventListener('click', () => {
-    const isMuted = sounds.toggleMute();
-    btnSfx.textContent = isMuted ? '🔇 SE: OFF' : '🔊 SE: ON';
-    btnSfx.style.borderColor = isMuted ? 'var(--accent-rose)' : '#334155';
-  });
-
-  btnVibration?.addEventListener('click', () => {
-    const enabled = game.input.toggleVibration();
-    btnVibration.textContent = enabled ? '📳 振動: ON' : '📴 振動: OFF';
-    btnVibration.style.borderColor = enabled ? '#334155' : 'var(--accent-rose)';
-    updateGamepadUI(game.input.getConnectedGamepads());
-  });
-
-  btnReset.addEventListener('click', () => {
-    if (game.state === 'TITLE' || game.state === 'SETUP') {
-      startBattleFromSetup();
-    } else {
-      game.startRound();
-    }
-  });
-
-  // Fullscreen toggle
-  const updateFullscreenBtn = () => {
-    if (!btnFullscreen) return;
-    const isFs = Boolean(document.fullscreenElement);
-    btnFullscreen.textContent = isFs ? '✕ 解除' : '⛶ 全画面';
-    btnFullscreen.style.borderColor = isFs ? 'var(--accent-cyan)' : '#334155';
+    if (pauseBtnBgm) pauseBtnBgm.textContent = label;
   };
 
-  btnFullscreen?.addEventListener('click', async () => {
+  const toggleSfx = () => {
+    const isMuted = sounds.toggleMute();
+    const label = isMuted ? '🔇 SE: OFF' : '🔊 SE: ON';
+    btnSfx.textContent = label;
+    btnSfx.style.borderColor = isMuted ? 'var(--accent-rose)' : '#334155';
+    if (pauseBtnSfx) pauseBtnSfx.textContent = label;
+  };
+
+  const toggleVibration = () => {
+    const enabled = game.input.toggleVibration();
+    const label = enabled ? '📳 振動: ON' : '📴 振動: OFF';
+    btnVibration.textContent = label;
+    btnVibration.style.borderColor = enabled ? '#334155' : 'var(--accent-rose)';
+    if (pauseBtnVibration) pauseBtnVibration.textContent = label;
+    updateGamepadUI(game.input.getConnectedGamepads());
+  };
+
+  const updateFullscreenBtn = () => {
+    const isFs = Boolean(document.fullscreenElement);
+    if (btnFullscreen) {
+      btnFullscreen.textContent = isFs ? '✕ 解除' : '⛶ 全画面';
+      btnFullscreen.style.borderColor = isFs ? 'var(--accent-cyan)' : '#334155';
+    }
+    if (pauseBtnFullscreen) {
+      pauseBtnFullscreen.textContent = isFs ? '✕ 全画面解除' : '⛶ 全画面切替';
+    }
+  };
+
+  const toggleFullscreen = async () => {
     try {
       if (!document.fullscreenElement) {
         await document.documentElement.requestFullscreen();
@@ -370,7 +449,65 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {
       // Ignore fullscreen errors if blocked by browser/iframe policy
     }
+  };
+
+  const handlePauseAction = (action: string) => {
+    switch (action) {
+      case 'resume':
+        game.togglePause();
+        break;
+      case 'retry':
+        game.startRound();
+        break;
+      case 'bgm':
+        toggleBgm();
+        break;
+      case 'sfx':
+        toggleSfx();
+        break;
+      case 'vibration':
+        toggleVibration();
+        break;
+      case 'setup':
+        showSetupScreen();
+        break;
+      case 'title':
+        showTitleScreen();
+        break;
+      case 'fullscreen':
+        toggleFullscreen();
+        break;
+    }
+  };
+
+  pauseMenuBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      showPadFocus = false;
+      const action = btn.dataset.action;
+      if (action) handlePauseAction(action);
+    });
   });
+
+  btnPauseOverlay?.addEventListener('click', () => {
+    if (game.state === 'PLAYING' || game.state === 'PAUSED') {
+      game.togglePause();
+    }
+  });
+
+  // Button Controls
+  btnBgm.addEventListener('click', toggleBgm);
+  btnSfx.addEventListener('click', toggleSfx);
+  btnVibration?.addEventListener('click', toggleVibration);
+
+  btnReset.addEventListener('click', () => {
+    if (game.state === 'TITLE' || game.state === 'SETUP') {
+      startBattleFromSetup();
+    } else {
+      game.startRound();
+    }
+  });
+
+  btnFullscreen?.addEventListener('click', toggleFullscreen);
   document.addEventListener('fullscreenchange', updateFullscreenBtn);
 
   // Popup Window mode
@@ -389,7 +526,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const win = window.open(
       url.toString(),
       'ai_bomberman_popup',
-      'width=820,height=860,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
+      'width=760,height=660,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no'
     );
     if (!win) {
       alert('ポップアップがブロックされました。ブラウザのポップアップ許可設定をご確認ください。');

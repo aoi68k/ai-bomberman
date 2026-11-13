@@ -292,8 +292,8 @@ export class GameManager {
   }
 
   private update() {
-    // STATE: TITLE or SETUP (poll gamepad menu navigation)
-    if (this.state === 'TITLE' || this.state === 'SETUP') {
+    // STATE: TITLE, SETUP, or PAUSED (poll gamepad menu navigation)
+    if (this.state === 'TITLE' || this.state === 'SETUP' || this.state === 'PAUSED') {
       const menuInput = this.input.getMenuInput();
       if (this.onMenuInput) {
         this.onMenuInput(menuInput);
@@ -315,11 +315,6 @@ export class GameManager {
         this.startRound();
         return;
       }
-    } else if (this.state === 'PAUSED') {
-      if (p1Input.restart) {
-        this.startRound();
-        return;
-      }
     }
 
     // STATE: COUNTDOWN
@@ -331,12 +326,6 @@ export class GameManager {
         this.broadcastStats();
       }
       this.particles.update();
-      this.input.endFrame();
-      return;
-    }
-
-    // STATE: PAUSED
-    if (this.state === 'PAUSED') {
       this.input.endFrame();
       return;
     }
@@ -1192,8 +1181,6 @@ export class GameManager {
       const bannerText = this.roundWinner ? `${this.roundWinner.config.name} WINS!` : 'DRAW GAME!';
       const bannerColor = this.roundWinner ? this.roundWinner.config.accentColor : '#94a3b8';
       this.drawBigBanner(ctx, bannerText, bannerColor, 'Press (A) / [R] for Next Round');
-    } else if (this.state === 'PAUSED') {
-      this.drawBigBanner(ctx, 'PAUSED', '#38bdf8', 'Press Start / [P] to Resume');
     }
   }
 
