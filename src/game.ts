@@ -2,6 +2,7 @@
 
 import {
   PLAYER_CONFIGS,
+  PLAYER_SLOT_COLORS,
   CHARACTERS,
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
@@ -52,6 +53,7 @@ export class GameManager {
   public roundTimeSeconds: number = 120; // 2 minutes
   public frameCount: number = 0;
   public countdownTimer: number = 180; // 3 seconds @ 60fps
+  private overheadTagTimer: number = 0; // 6 seconds @ 60fps (countdown 3s + playing 3s)
   public roundOverTimer: number = 0;
   public scores: number[] = [0, 0, 0, 0];
   public roundWinner: Player | null = null;
@@ -123,15 +125,18 @@ export class GameManager {
       const baseConfig = PLAYER_CONFIGS[slot.slotIndex];
       const isHuman = slot.control === '1P';
 
+      const slotColor = PLAYER_SLOT_COLORS[slot.slotIndex] || charData.accentColor;
+
       const config: PlayerConfig = {
         ...baseConfig,
         id: slot.slotIndex,
         isHuman,
         charId: charData.charId,
         name: isHuman ? `1P (${charData.jpName})` : `COM ${slot.slotIndex + 1} (${charData.jpName})`,
+        nameTag: slot.control,
         color: charData.color,
         subColor: charData.subColor,
-        accentColor: charData.accentColor,
+        accentColor: slotColor,
         stats: charData.stats,
         skillType: charData.skillType,
         skillCooldown: charData.skillCooldown,
@@ -204,6 +209,7 @@ export class GameManager {
     this.roundTimeSeconds = 120;
     this.frameCount = 0;
     this.countdownTimer = 180;
+    this.overheadTagTimer = 360;
     this.state = 'COUNTDOWN';
 
     this.suddenDeathIndex = 0;
@@ -320,6 +326,7 @@ export class GameManager {
     // STATE: COUNTDOWN
     if (this.state === 'COUNTDOWN') {
       this.countdownTimer--;
+      if (this.overheadTagTimer > 0) this.overheadTagTimer--;
       if (this.countdownTimer <= 0) {
         this.state = 'PLAYING';
         sounds.playHurry();
@@ -341,6 +348,7 @@ export class GameManager {
 
     // STATE: PLAYING
     this.frameCount++;
+    if (this.overheadTagTimer > 0) this.overheadTagTimer--;
     if (this.frameCount % 60 === 0 && this.roundTimeSeconds > 0) {
       this.roundTimeSeconds--;
       if (this.roundTimeSeconds === 45 && !this.isHurryUp) {
@@ -1166,7 +1174,8 @@ export class GameManager {
       this.players,
       this.particles,
       this.roundTimeSeconds,
-      this.round
+      this.round,
+      this.overheadTagTimer
     );
 
     // Overlay state messages and active 3x3 tempest zones

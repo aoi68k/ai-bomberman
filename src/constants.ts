@@ -168,6 +168,14 @@ export interface PlayerConfig {
   ultraCooldown: number;
 }
 
+// Player Slot Base Colors: 1P Red, 2P Blue, 3P Green, 4P Yellow
+export const PLAYER_SLOT_COLORS = [
+  '#ef4444', // Player 1: Red
+  '#38bdf8', // Player 2: Blue
+  '#22c55e', // Player 3: Green
+  '#facc15', // Player 4: Yellow
+] as const;
+
 export const PLAYER_CONFIGS: PlayerConfig[] = [
   {
     id: 0,
@@ -176,8 +184,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     isHuman: true,
     color: '#3b82f6',
     subColor: '#ffffff',
-    accentColor: '#f43f5e',
-    nameTag: 'P1 (You)',
+    accentColor: PLAYER_SLOT_COLORS[0],
+    nameTag: '1P',
     spawnTileX: 1,
     spawnTileY: 1,
     personality: 'balanced',
@@ -193,8 +201,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     isHuman: false,
     color: '#1e293b',
     subColor: '#ef4444',
-    accentColor: '#fbbf24',
-    nameTag: 'COM 1 (Black)',
+    accentColor: PLAYER_SLOT_COLORS[1],
+    nameTag: 'COM',
     spawnTileX: 13,
     spawnTileY: 1,
     personality: 'aggressive',
@@ -210,8 +218,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     isHuman: false,
     color: '#dc2626',
     subColor: '#ffffff',
-    accentColor: '#f59e0b',
-    nameTag: 'COM 2 (Red)',
+    accentColor: PLAYER_SLOT_COLORS[2],
+    nameTag: 'COM',
     spawnTileX: 1,
     spawnTileY: 11,
     personality: 'collector',
@@ -227,8 +235,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     isHuman: false,
     color: '#059669',
     subColor: '#facc15',
-    accentColor: '#f97316',
-    nameTag: 'COM 3 (Green)',
+    accentColor: PLAYER_SLOT_COLORS[3],
+    nameTag: 'COM',
     spawnTileX: 13,
     spawnTileY: 11,
     personality: 'cautious',

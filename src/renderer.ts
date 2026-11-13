@@ -34,7 +34,8 @@ export class GameRenderer {
     players: Player[],
     particles: ParticleManager,
     timeRemaining: number, // in seconds
-    round: number
+    round: number,
+    overheadTagTimer: number = 0
   ) {
     const ctx = this.ctx;
 
@@ -64,7 +65,7 @@ export class GameRenderer {
     // 5. Draw Players (Sort by Y position so characters in front render over characters behind)
     const sortedPlayers = [...players].sort((a, b) => a.y - b.y);
     for (const p of sortedPlayers) {
-      this.drawPlayer(ctx, p);
+      this.drawPlayer(ctx, p, overheadTagTimer);
     }
 
     // 6. Draw Particles (on top of entities)
@@ -373,7 +374,7 @@ export class GameRenderer {
     }
   }
 
-  private drawPlayer(ctx: CanvasRenderingContext2D, p: Player) {
+  private drawPlayer(ctx: CanvasRenderingContext2D, p: Player, overheadTagTimer: number = 0) {
     if (!p.isAlive && p.deathTimer <= 0) return;
 
     ctx.save();
@@ -565,11 +566,23 @@ export class GameRenderer {
       this.drawFirefly(ctx, baseAngle + Math.PI, now, '#ef4444', '#7f1d1d', '#ffffff', 1.9, ultraProgress);
     }
 
-    // Name Tag over head
-    ctx.font = 'bold 9px sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.textAlign = 'center';
-    ctx.fillText(p.config.name, 0, p.stunTimer > 0 ? -42 : -32);
+    // Overhead player tag (1P / COM / 2P...) shown for 6 seconds from countdown start in slot color
+    if (overheadTagTimer > 0 && p.isAlive) {
+      const alpha = overheadTagTimer < 30 ? overheadTagTimer / 30 : 1;
+      const tagY = p.stunTimer > 0 ? -42 : -32;
+      ctx.save();
+      ctx.globalAlpha *= alpha;
+      ctx.font = '900 12px "Segoe UI", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(2, 6, 23, 0.92)';
+      ctx.strokeText(p.config.nameTag, 0, tagY);
+      ctx.fillStyle = p.config.accentColor;
+      ctx.fillText(p.config.nameTag, 0, tagY);
+      ctx.restore();
+    }
 
     ctx.restore();
   }

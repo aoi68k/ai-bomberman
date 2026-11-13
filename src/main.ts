@@ -5,7 +5,7 @@ import { GameManager, GameStats } from './game';
 import { sounds } from './audio';
 import { GamepadInfo, MenuInput } from './input';
 import { assets } from './assets';
-import { CHARACTERS, loadCharacters } from './constants';
+import { CHARACTERS, PLAYER_SLOT_COLORS, loadCharacters } from './constants';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const charList = Object.values(CHARACTERS);
   const draftSlots = game.playerSlots.map((s) => ({ ...s }));
-  const slotColors = ['#f43f5e', '#38bdf8', '#facc15', '#10b981'];
+  const slotColors = PLAYER_SLOT_COLORS;
   let activeSlotIdx = 0; // 0..3: slot currently receiving character selection
   let setupArea: 'roster' | 'footer' = 'roster';
   let rosterFocus = 0; // 0..charList.length-1
@@ -123,13 +123,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       setupRoster.appendChild(item);
     });
 
-    // 2. Render 4 player slots below
+    // 2. Render 4 player slots below (each slot uses its fixed player color: 1P Red, 2P Blue, 3P Green, 4P Yellow)
     draftSlots.forEach((slot, idx) => {
       const charIdx = Math.max(
         0,
         charList.findIndex((c) => c.charId === slot.charId)
       );
       const charInfo = charList[charIdx] || charList[0];
+      const slotColor = slotColors[idx] || '#38bdf8';
 
       const portraitImg = assets.getImage(`portrait_${charInfo.charId}` as any);
       const portraitSrc = portraitImg
@@ -139,13 +140,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       const slotEl = document.createElement('div');
       const isEditing = idx === activeSlotIdx;
       slotEl.className = `setup-slot ${slot.control === 'OFF' ? 'is-off' : ''} ${isEditing ? 'is-editing' : ''}`;
-      slotEl.style.borderColor = slot.control === 'OFF' ? '#334155' : charInfo.accentColor;
+      slotEl.style.borderColor = slot.control === 'OFF' ? '#334155' : slotColor;
 
       slotEl.innerHTML = `
         <div class="setup-slot-top">
-          <span class="setup-slot-label">
+          <span class="setup-slot-label" style="color: ${slotColor}">
             PLAYER ${idx + 1}
-            ${isEditing ? '<span class="editing-tag">選択中</span>' : ''}
+            ${isEditing ? `<span class="editing-tag" style="background: ${slotColor}">選択中</span>` : ''}
           </span>
           <div class="control-toggle-group">
             <button type="button" class="ctrl-btn ${slot.control === '1P' ? 'active-1p' : ''}" data-ctrl="1P">1P</button>
@@ -154,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
         <div class="setup-char-row">
-          <img src="${portraitSrc}" alt="${charInfo.jpName}" class="setup-portrait" style="border-color: ${charInfo.accentColor}" />
+          <img src="${portraitSrc}" alt="${charInfo.jpName}" class="setup-portrait" style="border-color: ${slotColor}" />
           <div class="setup-char-details">
             <div class="setup-char-name">${charInfo.jpName}</div>
             <div class="setup-skill-mini">${charInfo.skillName}</div>
