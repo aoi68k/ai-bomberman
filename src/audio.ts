@@ -6,7 +6,7 @@ class SoundManager {
   private masterGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private bgmGain: GainNode | null = null;
-  private isSfxMuted: boolean = true; // Default OFF for Sound Effects (SE)
+  private isSfxMuted: boolean = false; // Default ON for Sound Effects (SE)
   private bgmPlaying: boolean = false;
   private bgmStep: number = 0;
   private bgmTimer: number | null = null;
