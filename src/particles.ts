@@ -14,13 +14,26 @@ export interface Particle {
   gravity?: number;
 }
 
+export interface SlashEffect {
+  x: number;
+  y: number;
+  angle: number;
+  radius: number;
+  color: string;
+  life: number;
+  maxLife: number;
+  flip: boolean;
+}
+
 export class ParticleManager {
   public particles: Particle[] = [];
+  public slashes: SlashEffect[] = [];
   public shakeDuration: number = 0;
   public shakeIntensity: number = 0;
 
   public reset() {
     this.particles = [];
+    this.slashes = [];
     this.shakeDuration = 0;
     this.shakeIntensity = 0;
   }
