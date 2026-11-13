@@ -1,0 +1,23 @@
+{
+  "charId": "chen",
+  "name": "Chen",
+  "jpName": "チェン",
+  "role": "龍剣士",
+  "folder": "characters/chen",
+  "color": "#0284c7",
+  "subColor": "#f8fafc",
+  "accentColor": "#38bdf8",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "CHEN_SLASH_RUSH",
+  "skillName": "二連斬り突進 (Slash Rush)",
+  "skillDesc": "前方0～1マスに2回斬撃ののち、0～2マス斬撃しながら突進（3秒スタン）",
+  "skillCooldown": 600,
+  "ultraType": "CHEN_TEMPEST_RUSH",
+  "ultraName": "龍閃乱れ斬り (Tempest)",
+  "ultraDesc": "斬撃乱れ斬をしながら前方4マス突進！斬撃を受けた敵を3秒スタン",
+  "ultraCooldown": 1200
+}

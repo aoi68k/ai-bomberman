@@ -1,0 +1,23 @@
+{
+  "charId": "bomber_purple",
+  "name": "Bomber Purple",
+  "jpName": "ボンバーパープル",
+  "role": "ストライカー",
+  "folder": "characters/bomber_purple",
+  "color": "#8b5cf6",
+  "subColor": "#ede9fe",
+  "accentColor": "#fbbf24",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "TACKLE",
+  "skillName": "スタンタックル (Tackle)",
+  "skillDesc": "向いている方向へ2マス突進！当たった敵を3秒間スタンさせる",
+  "skillCooldown": 600,
+  "ultraType": "ULTRA_METEOR_TACKLE",
+  "ultraName": "メテオタックル (Meteor)",
+  "ultraDesc": "前方3マスへ猛突進！当たった敵を4秒間スタンさせる",
+  "ultraCooldown": 1200
+}

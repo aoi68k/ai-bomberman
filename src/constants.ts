@@ -55,6 +55,12 @@ export const CORNERING_ASSIST_THRESHOLD = 24; // Half-tile distance to snap/slid
 export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY' | 'TACKLE' | 'CHEN_SLASH_RUSH';
 export type UltraType = 'ULTRA_BLITZ_DASH' | 'ULTRA_ALL_DETONATE' | 'ULTRA_NOVA_BOMB' | 'ULTRA_FORTRESS' | 'ULTRA_METEOR_TACKLE' | 'CHEN_TEMPEST_RUSH';
 
+export interface CharacterStats {
+  initialBombs?: number;
+  initialPower?: number;
+  initialSpeed?: number;
+}
+
 export interface CharacterInfo {
   charId: string;
   name: string;
@@ -64,6 +70,7 @@ export interface CharacterInfo {
   color: string;
   subColor: string;
   accentColor: string;
+  stats?: CharacterStats;
   skillType: SkillType;
   skillName: string;
   skillDesc: string;
@@ -74,116 +81,70 @@ export interface CharacterInfo {
   ultraCooldown: number; // in frames (60fps)
 }
 
-export const CHARACTERS: Record<string, CharacterInfo> = {
-  bomber_blue: {
-    charId: 'bomber_blue',
-    name: 'Bomber Blue',
-    jpName: 'ボンバーブルー',
-    role: 'オールラウンダー',
-    folder: 'characters/bomber_blue',
-    color: '#3b82f6',
-    subColor: '#ffffff',
-    accentColor: '#f43f5e',
-    skillType: 'DASH',
-    skillName: 'ダッシュ (Dash)',
-    skillDesc: '向いている方向へ素早く2マス突進！爆風回避に',
-    skillCooldown: 480, // 8 seconds
-    ultraType: 'ULTRA_BLITZ_DASH',
-    ultraName: '閃光ダッシュ (Blitz)',
-    ultraDesc: '前方3マスへ高速ワープ＆1秒間無敵！',
-    ultraCooldown: 1080, // 18 seconds
-  },
-  bomber_black: {
-    charId: 'bomber_black',
-    name: 'Bomber Black',
-    jpName: 'ボンバーブラック',
-    role: 'スピードスター',
-    folder: 'characters/bomber_black',
-    color: '#1e293b',
-    subColor: '#ef4444',
-    accentColor: '#fbbf24',
-    skillType: 'REMOTE_DETONATE',
-    skillName: 'リモコン起爆 (Remote)',
-    skillDesc: '直前に置いた自分のボムを好きなタイミングで遠隔爆破！',
-    skillCooldown: 600, // 10 seconds
-    ultraType: 'ULTRA_ALL_DETONATE',
-    ultraName: '一斉起爆 (All Detonate)',
-    ultraDesc: '設置中の自分のボムすべてを即座に大爆発させる！',
-    ultraCooldown: 1200, // 20 seconds
-  },
-  bomber_red: {
-    charId: 'bomber_red',
-    name: 'Bomber Red',
-    jpName: 'ボンバーレッド',
-    role: 'パワーファイター',
-    folder: 'characters/bomber_red',
-    color: '#dc2626',
-    subColor: '#ffffff',
-    accentColor: '#f59e0b',
-    skillType: 'MEGA_BOMB',
-    skillName: 'メガボム (Mega Bomb)',
-    skillDesc: '次回置くボムがブロック貫通の超特大メガボムになる！',
-    skillCooldown: 720, // 12 seconds
-    ultraType: 'ULTRA_NOVA_BOMB',
-    ultraName: 'ノヴァボム (Nova Bomb)',
-    ultraDesc: '最大火力8の超特大ボムを足元に即時展開！',
-    ultraCooldown: 1200, // 20 seconds
-  },
-  bomber_green: {
-    charId: 'bomber_green',
-    name: 'Bomber Green',
-    jpName: 'ボンバーグリーン',
-    role: 'ディフェンダー',
-    folder: 'characters/bomber_green',
-    color: '#059669',
-    subColor: '#facc15',
-    accentColor: '#f97316',
-    skillType: 'SHIELD_DEPLOY',
-    skillName: '緊急シールド (Shield)',
-    skillDesc: '3秒間、爆風を防ぐエネルギーシールドを1枚展開！',
-    skillCooldown: 900, // 15 seconds
-    ultraType: 'ULTRA_FORTRESS',
-    ultraName: 'フォートレス (Fortress)',
-    ultraDesc: 'シールド2枚展開＆2秒間完全無敵状態になる！',
-    ultraCooldown: 1320, // 22 seconds
-  },
-  bomber_purple: {
-    charId: 'bomber_purple',
-    name: 'Bomber Purple',
-    jpName: 'ボンバーパープル',
-    role: 'ストライカー',
-    folder: 'characters/bomber_purple',
-    color: '#8b5cf6',
-    subColor: '#ede9fe',
-    accentColor: '#fbbf24',
-    skillType: 'TACKLE',
-    skillName: 'スタンタックル (Tackle)',
-    skillDesc: '向いている方向へ2マス突進！当たった敵を3秒間スタンさせる',
-    skillCooldown: 600, // 10 seconds
-    ultraType: 'ULTRA_METEOR_TACKLE',
-    ultraName: 'メテオタックル (Meteor)',
-    ultraDesc: '前方3マスへ猛突進！当たった敵を4秒間スタンさせる',
-    ultraCooldown: 1200, // 20 seconds
-  },
-  chen: {
-    charId: 'chen',
-    name: 'Chen',
-    jpName: 'チェン',
-    role: '龍剣士',
-    folder: 'characters/chen',
-    color: '#0284c7',
-    subColor: '#f8fafc',
-    accentColor: '#38bdf8',
-    skillType: 'CHEN_SLASH_RUSH',
-    skillName: '二連斬り突進 (Slash Rush)',
-    skillDesc: '前方0～1マスに2回斬撃ののち、0～2マス斬撃しながら突進（3秒スタン）',
-    skillCooldown: 600, // 10 seconds
-    ultraType: 'CHEN_TEMPEST_RUSH',
-    ultraName: '龍閃乱れ斬り (Tempest)',
-    ultraDesc: '斬撃乱れ斬をしながら前方4マス突進！斬撃を受けた敵を3秒スタン',
-    ultraCooldown: 1200, // 20 seconds
-  },
-};
+/**
+ * Character catalog populated dynamically from public/assets/images/characters/<id>/character.json
+ */
+export const CHARACTERS: Record<string, CharacterInfo> = {};
+
+// Bundled fallback via Vite glob (reads directly from character.json files for standalone/file:// mode)
+const bundledCharacterModules = import.meta.glob<{ default: CharacterInfo }>(
+  '../public/assets/images/characters/*/character.json',
+  { eager: true }
+);
+
+/**
+ * Loads all character definitions from character.json files under characters/
+ */
+export async function loadCharacters(): Promise<void> {
+  // Clear existing entries
+  for (const key of Object.keys(CHARACTERS)) {
+    delete CHARACTERS[key];
+  }
+
+  // 1. Try runtime fetch from /assets/images/characters/index.json (supports live JSON edits)
+  try {
+    const idxRes = await fetch('/assets/images/characters/index.json');
+    if (idxRes.ok) {
+      const charIds: string[] = await idxRes.json();
+      const loaded = await Promise.all(
+        charIds.map(async (id) => {
+          const res = await fetch(`/assets/images/characters/${id}/character.json`);
+          if (!res.ok) throw new Error(`Failed to load ${id}/character.json`);
+          return (await res.json()) as CharacterInfo;
+        })
+      );
+      for (const char of loaded) {
+        CHARACTERS[char.charId] = char;
+      }
+      if (Object.keys(CHARACTERS).length > 0) {
+        return;
+      }
+    }
+  } catch {
+    // Fallback to bundled JSONs (e.g. file:// standalone preview)
+  }
+
+  // 2. Fallback: populate from bundled character.json modules
+  const preferredOrder = ['bomber_blue', 'bomber_black', 'bomber_red', 'bomber_green', 'bomber_purple', 'chen'];
+  const entries: CharacterInfo[] = [];
+  for (const mod of Object.values(bundledCharacterModules)) {
+    const data = mod.default || (mod as unknown as CharacterInfo);
+    if (data && data.charId) {
+      entries.push(data);
+    }
+  }
+  entries.sort((a, b) => {
+    const ia = preferredOrder.indexOf(a.charId);
+    const ib = preferredOrder.indexOf(b.charId);
+    if (ia === -1 && ib === -1) return a.charId.localeCompare(b.charId);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+  for (const char of entries) {
+    CHARACTERS[char.charId] = char;
+  }
+}
 
 // Player appearance & config
 export interface PlayerConfig {
@@ -198,6 +159,7 @@ export interface PlayerConfig {
   spawnTileX: number;
   spawnTileY: number;
   personality: 'balanced' | 'aggressive' | 'collector' | 'cautious';
+  stats?: CharacterStats;
   skillType: SkillType;
   skillCooldown: number;
   ultraType: UltraType;

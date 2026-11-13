@@ -1,0 +1,23 @@
+{
+  "charId": "bomber_black",
+  "name": "Bomber Black",
+  "jpName": "ボンバーブラック",
+  "role": "スピードスター",
+  "folder": "characters/bomber_black",
+  "color": "#1e293b",
+  "subColor": "#ef4444",
+  "accentColor": "#fbbf24",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "REMOTE_DETONATE",
+  "skillName": "リモコン起爆 (Remote)",
+  "skillDesc": "直前に置いた自分のボムを好きなタイミングで遠隔爆破！",
+  "skillCooldown": 600,
+  "ultraType": "ULTRA_ALL_DETONATE",
+  "ultraName": "一斉起爆 (All Detonate)",
+  "ultraDesc": "設置中の自分のボムすべてを即座に大爆発させる！",
+  "ultraCooldown": 1200
+}

@@ -1,0 +1,23 @@
+{
+  "charId": "bomber_blue",
+  "name": "Bomber Blue",
+  "jpName": "ボンバーブルー",
+  "role": "オールラウンダー",
+  "folder": "characters/bomber_blue",
+  "color": "#3b82f6",
+  "subColor": "#ffffff",
+  "accentColor": "#f43f5e",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "DASH",
+  "skillName": "ダッシュ (Dash)",
+  "skillDesc": "向いている方向へ素早く2マス突進！爆風回避に",
+  "skillCooldown": 480,
+  "ultraType": "ULTRA_BLITZ_DASH",
+  "ultraName": "閃光ダッシュ (Blitz)",
+  "ultraDesc": "前方3マスへ高速ワープ＆1秒間無敵！",
+  "ultraCooldown": 1080
+}

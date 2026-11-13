@@ -1,0 +1,23 @@
+{
+  "charId": "bomber_red",
+  "name": "Bomber Red",
+  "jpName": "ボンバーレッド",
+  "role": "パワーファイター",
+  "folder": "characters/bomber_red",
+  "color": "#dc2626",
+  "subColor": "#ffffff",
+  "accentColor": "#f59e0b",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "MEGA_BOMB",
+  "skillName": "メガボム (Mega Bomb)",
+  "skillDesc": "次回置くボムがブロック貫通の超特大メガボムになる！",
+  "skillCooldown": 720,
+  "ultraType": "ULTRA_NOVA_BOMB",
+  "ultraName": "ノヴァボム (Nova Bomb)",
+  "ultraDesc": "最大火力8の超特大ボムを足元に即時展開！",
+  "ultraCooldown": 1200
+}

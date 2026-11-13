@@ -1,0 +1,23 @@
+{
+  "charId": "bomber_green",
+  "name": "Bomber Green",
+  "jpName": "ボンバーグリーン",
+  "role": "ディフェンダー",
+  "folder": "characters/bomber_green",
+  "color": "#059669",
+  "subColor": "#facc15",
+  "accentColor": "#f97316",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "SHIELD_DEPLOY",
+  "skillName": "緊急シールド (Shield)",
+  "skillDesc": "3秒間、爆風を防ぐエネルギーシールドを1枚展開！",
+  "skillCooldown": 900,
+  "ultraType": "ULTRA_FORTRESS",
+  "ultraName": "フォートレス (Fortress)",
+  "ultraDesc": "シールド2枚展開＆2秒間完全無敵状態になる！",
+  "ultraCooldown": 1320
+}

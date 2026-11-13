@@ -75,10 +75,10 @@ export class Player {
     this.y = this.config.spawnTileY * TILE_SIZE + TILE_SIZE / 2;
     this.vx = 0;
     this.vy = 0;
-    this.speed = INITIAL_PLAYER_SPEED;
-    this.maxBombs = INITIAL_BOMBS;
+    this.speed = this.config.stats?.initialSpeed ?? INITIAL_PLAYER_SPEED;
+    this.maxBombs = this.config.stats?.initialBombs ?? INITIAL_BOMBS;
     this.activeBombs = 0;
-    this.power = INITIAL_POWER;
+    this.power = this.config.stats?.initialPower ?? INITIAL_POWER;
     this.hasKick = false;
     this.shield = 0;
     this.skillCooldownTimer = 0;

@@ -79,7 +79,7 @@ export class GameManager {
     this.aiControllers = [];
 
     // Player 1 configuration based on selected character
-    const charData = CHARACTERS[this.selectedCharId] || CHARACTERS['bomber_blue'];
+    const charData = CHARACTERS[this.selectedCharId] || Object.values(CHARACTERS)[0];
     const p1Config: PlayerConfig = {
       ...PLAYER_CONFIGS[0],
       charId: charData.charId,
@@ -87,6 +87,7 @@ export class GameManager {
       color: charData.color,
       subColor: charData.subColor,
       accentColor: charData.accentColor,
+      stats: charData.stats,
       skillType: charData.skillType,
       skillCooldown: charData.skillCooldown,
       ultraType: charData.ultraType,
@@ -113,6 +114,7 @@ export class GameManager {
         color: comCharData.color,
         subColor: comCharData.subColor,
         accentColor: comCharData.accentColor,
+        stats: comCharData.stats,
         skillType: comCharData.skillType,
         skillCooldown: comCharData.skillCooldown,
         ultraType: comCharData.ultraType,
