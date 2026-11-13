@@ -11,7 +11,7 @@ import { GameMap } from './map';
 import { BombManager, Bomb } from './bomb';
 import { Player } from './player';
 import { AIController } from './ai';
-import { InputManager } from './input';
+import { InputManager, MenuInput } from './input';
 import { ParticleManager } from './particles';
 import { GameRenderer } from './renderer';
 import { sounds } from './audio';
@@ -86,6 +86,7 @@ export class GameManager {
   private animFrameId: number | null = null;
 
   public onStatsChange?: (stats: GameStats) => void;
+  public onMenuInput?: (input: MenuInput) => void;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -291,6 +292,16 @@ export class GameManager {
   }
 
   private update() {
+    // STATE: TITLE or SETUP (poll gamepad menu navigation)
+    if (this.state === 'TITLE' || this.state === 'SETUP') {
+      const menuInput = this.input.getMenuInput();
+      if (this.onMenuInput) {
+        this.onMenuInput(menuInput);
+      }
+      this.input.endFrame();
+      return;
+    }
+
     // Check input for Player 1
     const p1Input = this.input.getPlayerInput(0);
     if (p1Input.pause) {
@@ -324,8 +335,8 @@ export class GameManager {
       return;
     }
 
-    // STATE: PAUSED, TITLE, or SETUP
-    if (this.state === 'PAUSED' || this.state === 'TITLE' || this.state === 'SETUP') {
+    // STATE: PAUSED
+    if (this.state === 'PAUSED') {
       this.input.endFrame();
       return;
     }

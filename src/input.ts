@@ -11,6 +11,17 @@ export interface PlayerInput {
   restart: boolean; // Restart pressed
 }
 
+export interface MenuInput {
+  dx: number;
+  dy: number;
+  confirm: boolean;  // A (0)
+  cancel: boolean;   // B (1)
+  alt: boolean;      // X (2)
+  prevChar: boolean; // LB (4)
+  nextChar: boolean; // RB (5)
+  start: boolean;    // Start (9)
+}
+
 export interface GamepadInfo {
   index: number;
   id: string;
@@ -22,8 +33,9 @@ export class InputManager {
   private keysDown: Set<string> = new Set();
   private keysPressed: Set<string> = new Set();
   private prevPadButtons: Map<number, boolean[]> = new Map();
+  private prevMenuDir: { dx: number; dy: number } = { dx: 0, dy: 0 };
   private connectedGamepads: Map<number, GamepadInfo> = new Map();
-  public vibrationEnabled: boolean = true;
+  public vibrationEnabled: boolean = false;
   public onGamepadChange?: (pads: GamepadInfo[]) => void;
 
   constructor() {
@@ -291,6 +303,85 @@ export class InputManager {
     }
 
     return { dx, dy, bomb, bombDown, skill, ultra, pause, restart };
+  }
+
+  /**
+   * Polls gamepad edge-triggered input for Title and Setup menus
+   */
+  public getMenuInput(): MenuInput {
+    const result: MenuInput = {
+      dx: 0,
+      dy: 0,
+      confirm: false,
+      cancel: false,
+      alt: false,
+      prevChar: false,
+      nextChar: false,
+      start: false,
+    };
+
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let pad: Gamepad | null = gamepads[0] && gamepads[0].connected ? gamepads[0] : null;
+    if (!pad) {
+      for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i] && gamepads[i]!.connected) {
+          pad = gamepads[i]!;
+          break;
+        }
+      }
+    }
+
+    if (!pad) {
+      this.prevMenuDir = { dx: 0, dy: 0 };
+      return result;
+    }
+
+    const prevButtons = this.prevPadButtons.get(pad.index) || [];
+    const currentButtons: boolean[] = [];
+
+    const checkBtn = (idx: number): boolean => {
+      const pressed = pad!.buttons[idx]?.pressed || false;
+      currentButtons[idx] = pressed;
+      return pressed && !prevButtons[idx];
+    };
+
+    result.confirm = checkBtn(0);
+    result.cancel = checkBtn(1);
+    result.alt = checkBtn(2);
+    result.prevChar = checkBtn(4);
+    result.nextChar = checkBtn(5);
+    result.start = checkBtn(9);
+
+    // Preserve other tracked buttons to avoid false edges on state transition
+    for (const idx of [3, 6, 7, 8, 12, 13, 14, 15]) {
+      currentButtons[idx] = pad.buttons[idx]?.pressed || false;
+    }
+    this.prevPadButtons.set(pad.index, currentButtons);
+
+    // Direction edge detection (D-Pad + Left Stick)
+    let rawDx = 0;
+    let rawDy = 0;
+    if (pad.buttons[14]?.pressed) rawDx = -1;
+    else if (pad.buttons[15]?.pressed) rawDx = 1;
+    if (pad.buttons[12]?.pressed) rawDy = -1;
+    else if (pad.buttons[13]?.pressed) rawDy = 1;
+
+    if (rawDx === 0 && rawDy === 0) {
+      const stickX = pad.axes[0] || 0;
+      const stickY = pad.axes[1] || 0;
+      const MENU_DEADZONE = 0.45;
+      if (Math.abs(stickX) > MENU_DEADZONE && Math.abs(stickX) >= Math.abs(stickY)) {
+        rawDx = stickX > 0 ? 1 : -1;
+      } else if (Math.abs(stickY) > MENU_DEADZONE) {
+        rawDy = stickY > 0 ? 1 : -1;
+      }
+    }
+
+    if (rawDx !== 0 && this.prevMenuDir.dx === 0) result.dx = rawDx;
+    if (rawDy !== 0 && this.prevMenuDir.dy === 0) result.dy = rawDy;
+    this.prevMenuDir = { dx: rawDx, dy: rawDy };
+
+    return result;
   }
 
   /**

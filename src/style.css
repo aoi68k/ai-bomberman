@@ -843,3 +843,14 @@ body.popup-mode .game-container {
   color: var(--accent-rose);
   font-weight: 700;
 }
+
+.setup-slot.pad-focused {
+  box-shadow: 0 0 0 2px #38bdf8, 0 0 16px rgba(56, 189, 248, 0.55);
+  background: #162238;
+}
+
+.action-btn.pad-focused,
+.primary-start-btn.pad-focused {
+  box-shadow: 0 0 0 3px #38bdf8, 0 0 18px rgba(56, 189, 248, 0.7);
+  transform: translateY(-1px) scale(1.03);
+}

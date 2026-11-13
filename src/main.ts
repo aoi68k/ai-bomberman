@@ -3,7 +3,7 @@
 import './style.css';
 import { GameManager, GameStats } from './game';
 import { sounds } from './audio';
-import { GamepadInfo } from './input';
+import { GamepadInfo, MenuInput } from './input';
 import { assets } from './assets';
 import { CHARACTERS, loadCharacters } from './constants';
 
@@ -41,6 +41,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const charList = Object.values(CHARACTERS);
   const draftSlots = game.playerSlots.map((s) => ({ ...s }));
+  let setupFocus = 0; // 0..3: player slots, 4: back to title, 5: battle start
+  let showPadFocus = false;
+
+  const setSlotControl = (idx: number, nextCtrl: '1P' | 'COM' | 'OFF') => {
+    if (nextCtrl === '1P') {
+      draftSlots.forEach((other, oIdx) => {
+        if (oIdx !== idx && other.control === '1P') {
+          other.control = 'COM';
+        }
+      });
+    }
+    draftSlots[idx].control = nextCtrl;
+  };
+
+  const stepSlotChar = (idx: number, dir: number) => {
+    const slot = draftSlots[idx];
+    const charIdx = Math.max(
+      0,
+      charList.findIndex((c) => c.charId === slot.charId)
+    );
+    const nextIdx = (charIdx + dir + charList.length) % charList.length;
+    slot.charId = charList[nextIdx].charId;
+  };
 
   const renderSetupGrid = () => {
     setupGrid.innerHTML = '';
@@ -52,6 +75,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       setupValidationMsg.textContent = '';
       btnBattleStart.disabled = false;
     }
+
+    btnBackToTitle.classList.toggle('pad-focused', showPadFocus && setupFocus === 4);
+    btnBattleStart.classList.toggle('pad-focused', showPadFocus && setupFocus === 5);
 
     draftSlots.forEach((slot, idx) => {
       const charIdx = Math.max(
@@ -66,7 +92,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         : `assets/images/characters/${charInfo.folder || charInfo.charId}/idle.png`;
 
       const slotEl = document.createElement('div');
-      slotEl.className = `setup-slot ${slot.control === 'OFF' ? 'is-off' : ''}`;
+      const isFocused = showPadFocus && setupFocus === idx;
+      slotEl.className = `setup-slot ${slot.control === 'OFF' ? 'is-off' : ''} ${isFocused ? 'pad-focused' : ''}`;
       slotEl.style.borderColor = slot.control === 'OFF' ? '#334155' : charInfo.accentColor;
 
       slotEl.innerHTML = `
@@ -94,24 +121,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       slotEl.querySelectorAll<HTMLButtonElement>('.ctrl-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
-          const nextCtrl = btn.dataset.ctrl as '1P' | 'COM' | 'OFF';
-          if (nextCtrl === '1P') {
-            draftSlots.forEach((other, oIdx) => {
-              if (oIdx !== idx && other.control === '1P') {
-                other.control = 'COM';
-              }
-            });
-          }
-          slot.control = nextCtrl;
+          showPadFocus = false;
+          setSlotControl(idx, btn.dataset.ctrl as '1P' | 'COM' | 'OFF');
           renderSetupGrid();
         });
       });
 
       slotEl.querySelectorAll<HTMLButtonElement>('.char-nav-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
+          showPadFocus = false;
           const dir = parseInt(btn.dataset.dir || '1', 10);
-          const nextIdx = (charIdx + dir + charList.length) % charList.length;
-          slot.charId = charList[nextIdx].charId;
+          stepSlotChar(idx, dir);
           renderSetupGrid();
         });
       });
@@ -129,6 +149,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const showSetupScreen = () => {
     titleScreen.classList.add('hidden');
     setupScreen.classList.remove('hidden');
+    setupFocus = 0;
+    showPadFocus = game.input.getConnectedGamepads().some((p) => p.connected);
     game.showSetup();
     renderSetupGrid();
   };
@@ -152,6 +174,81 @@ document.addEventListener('DOMContentLoaded', async () => {
       showSetupScreen();
     }
   });
+
+  // Gamepad navigation for Title & Setup screens
+  game.onMenuInput = (input: MenuInput) => {
+    const hasInput =
+      input.dx !== 0 ||
+      input.dy !== 0 ||
+      input.confirm ||
+      input.cancel ||
+      input.alt ||
+      input.prevChar ||
+      input.nextChar ||
+      input.start;
+
+    if (!hasInput) return;
+
+    if (game.state === 'TITLE') {
+      if (input.confirm || input.start) {
+        showPadFocus = true;
+        showSetupScreen();
+      }
+      return;
+    }
+
+    if (game.state === 'SETUP') {
+      showPadFocus = true;
+
+      if (input.cancel) {
+        showTitleScreen();
+        return;
+      }
+      if (input.start) {
+        if (!btnBattleStart.disabled) {
+          startBattleFromSetup();
+        }
+        return;
+      }
+
+      // 2x2 grid (0..3) + footer buttons (4: Back, 5: Battle Start)
+      if (input.dx !== 0) {
+        if (setupFocus % 2 === 0 && input.dx > 0) setupFocus += 1;
+        else if (setupFocus % 2 === 1 && input.dx < 0) setupFocus -= 1;
+      }
+      if (input.dy !== 0) {
+        const nextFocus = setupFocus + input.dy * 2;
+        if (nextFocus >= 0 && nextFocus <= 5) {
+          setupFocus = nextFocus;
+        }
+      }
+
+      if (setupFocus >= 0 && setupFocus <= 3) {
+        if (input.confirm || input.nextChar) {
+          stepSlotChar(setupFocus, 1);
+        } else if (input.prevChar) {
+          stepSlotChar(setupFocus, -1);
+        } else if (input.alt) {
+          const order: Array<'1P' | 'COM' | 'OFF'> = ['1P', 'COM', 'OFF'];
+          const cur = draftSlots[setupFocus].control;
+          const next = order[(order.indexOf(cur) + 1) % order.length];
+          setSlotControl(setupFocus, next);
+        }
+      } else if (setupFocus === 4) {
+        if (input.confirm) {
+          showTitleScreen();
+          return;
+        }
+      } else if (setupFocus === 5) {
+        if (input.confirm && !btnBattleStart.disabled) {
+          startBattleFromSetup();
+          return;
+        }
+      }
+
+      renderSetupGrid();
+    }
+  };
 
   // Render player cards
   const updatePlayerCards = (stats: GameStats) => {
@@ -206,7 +303,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (activePad) {
       gamepadIndicator.classList.add('active');
       gamepadStatus.classList.add('connected');
-      const vibrationTag = activePad.hasVibration ? ' [Vibration ON]' : '';
+      const vibrationTag = activePad.hasVibration
+        ? game.input.vibrationEnabled
+          ? ' [Vibration ON]'
+          : ' [Vibration OFF]'
+        : '';
       gamepadStatus.innerHTML = `<span>🎮 Gamepad Connected: <strong>${activePad.id.slice(0, 24)}...</strong>${vibrationTag}</span>`;
     } else {
       gamepadIndicator.classList.remove('active');
@@ -240,6 +341,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const enabled = game.input.toggleVibration();
     btnVibration.textContent = enabled ? '📳 振動: ON' : '📴 振動: OFF';
     btnVibration.style.borderColor = enabled ? '#334155' : 'var(--accent-rose)';
+    updateGamepadUI(game.input.getConnectedGamepads());
   });
 
   btnReset.addEventListener('click', () => {
