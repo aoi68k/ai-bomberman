@@ -16,12 +16,13 @@ import { InputManager, MenuInput } from './input';
 import { ParticleManager } from './particles';
 import { GameRenderer } from './renderer';
 import { sounds } from './audio';
+import { GameSnapshot, RemoteInputPayload, SoundEventName } from './network';
 
 export type GameState = 'TITLE' | 'SETUP' | 'COUNTDOWN' | 'PLAYING' | 'ROUND_OVER' | 'PAUSED';
 
 export interface PlayerSlotConfig {
   slotIndex: number; // 0..3
-  control: '1P' | 'COM' | 'OFF';
+  control: '1P' | 'COM' | 'OFF' | 'REMOTE';
   charId: string;
 }
 
@@ -87,8 +88,18 @@ export class GameManager {
   private isRunning: boolean = false;
   private animFrameId: number | null = null;
 
+  // Online Multiplayer State
+  public isOnlineHost: boolean = false;
+  public isOnlineGuest: boolean = false;
+  public remoteInputs: Map<number, RemoteInputPayload> = new Map();
+  private lastGuestInputSent: RemoteInputPayload = { dx: 0, dy: 0, bomb: false, skill: false, ultra: false };
+  private syncTickCounter: number = 0;
+
   public onStatsChange?: (stats: GameStats) => void;
   public onMenuInput?: (input: MenuInput) => void;
+  public onHostSnapshot?: (snapshot: GameSnapshot) => void;
+  public onHostSound?: (event: SoundEventName) => void;
+  public onGuestSendInput?: (input: RemoteInputPayload) => void;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -123,17 +134,19 @@ export class GameManager {
 
       const charData = CHARACTERS[slot.charId] || fallbackChar;
       const baseConfig = PLAYER_CONFIGS[slot.slotIndex];
-      const isHuman = slot.control === '1P';
+      const isHuman = slot.control === '1P' || slot.control === 'REMOTE';
 
       const slotColor = PLAYER_SLOT_COLORS[slot.slotIndex] || charData.accentColor;
+      const labelPrefix = slot.control === '1P' ? '1P' : slot.control === 'REMOTE' ? `${slot.slotIndex + 1}P` : `COM ${slot.slotIndex + 1}`;
+      const tag = slot.control === 'REMOTE' ? `${slot.slotIndex + 1}P` : slot.control;
 
       const config: PlayerConfig = {
         ...baseConfig,
         id: slot.slotIndex,
         isHuman,
         charId: charData.charId,
-        name: isHuman ? `1P (${charData.jpName})` : `COM ${slot.slotIndex + 1} (${charData.jpName})`,
-        nameTag: slot.control,
+        name: `${labelPrefix} (${charData.jpName})`,
+        nameTag: tag,
         color: charData.color,
         subColor: charData.subColor,
         accentColor: slotColor,
@@ -260,12 +273,34 @@ export class GameManager {
   }
 
   public togglePause() {
+    // ポーズは1P（ホスト / ローカル1P）のみ可能
+    if (this.isOnlineGuest) return;
     if (this.state === 'PLAYING') {
       this.state = 'PAUSED';
     } else if (this.state === 'PAUSED') {
       this.state = 'PLAYING';
     }
     this.broadcastStats();
+    if (this.isOnlineHost) {
+      this.onHostSnapshot?.(this.exportSnapshot());
+    }
+  }
+
+  public setRemoteInput(slotIndex: number, input: RemoteInputPayload) {
+    const prev = this.remoteInputs.get(slotIndex);
+    this.remoteInputs.set(slotIndex, {
+      dx: input.dx,
+      dy: input.dy,
+      bomb: Boolean(prev?.bomb || input.bomb),
+      skill: Boolean(prev?.skill || input.skill),
+      ultra: Boolean(prev?.ultra || input.ultra),
+    });
+  }
+
+  private emitSound(event: SoundEventName) {
+    if (this.isOnlineHost) {
+      this.onHostSound?.(event);
+    }
   }
 
   public startLoop() {
@@ -301,14 +336,44 @@ export class GameManager {
     // STATE: TITLE, SETUP, or PAUSED (poll gamepad menu navigation)
     if (this.state === 'TITLE' || this.state === 'SETUP' || this.state === 'PAUSED') {
       const menuInput = this.input.getMenuInput();
-      if (this.onMenuInput) {
+      if (this.onMenuInput && !this.isOnlineGuest) {
+        this.onMenuInput(menuInput);
+      } else if (this.onMenuInput && this.state === 'SETUP') {
         this.onMenuInput(menuInput);
       }
       this.input.endFrame();
       return;
     }
 
-    // Check input for Player 1
+    // Online Guest: only send local input to Host and animate particles
+    if (this.isOnlineGuest) {
+      const guestInput = this.input.getPlayerInput(0);
+      if (this.state === 'PLAYING') {
+        const payload: RemoteInputPayload = {
+          dx: guestInput.dx,
+          dy: guestInput.dy,
+          bomb: guestInput.bomb,
+          skill: guestInput.skill,
+          ultra: guestInput.ultra,
+        };
+        const changed =
+          payload.dx !== this.lastGuestInputSent.dx ||
+          payload.dy !== this.lastGuestInputSent.dy ||
+          payload.bomb ||
+          payload.skill ||
+          payload.ultra;
+        this.syncTickCounter++;
+        if (changed || this.syncTickCounter % 3 === 0) {
+          this.onGuestSendInput?.(payload);
+          this.lastGuestInputSent = { ...payload, bomb: false, skill: false, ultra: false };
+        }
+      }
+      this.particles.update();
+      this.input.endFrame();
+      return;
+    }
+
+    // Check input for Player 1 (1P / Host)
     const p1Input = this.input.getPlayerInput(0);
     if (p1Input.pause) {
       this.togglePause();
@@ -319,6 +384,9 @@ export class GameManager {
       if ((p1Input.bomb || p1Input.restart || p1Input.pause) && this.roundOverTimer > 30) {
         this.round++;
         this.startRound();
+        if (this.isOnlineHost) {
+          this.onHostSnapshot?.(this.exportSnapshot());
+        }
         return;
       }
     }
@@ -330,10 +398,17 @@ export class GameManager {
       if (this.countdownTimer <= 0) {
         this.state = 'PLAYING';
         sounds.playHurry();
+        this.emitSound('hurry');
         this.broadcastStats();
       }
       this.particles.update();
       this.input.endFrame();
+      if (this.isOnlineHost) {
+        this.syncTickCounter++;
+        if (this.syncTickCounter % 2 === 0 || this.state === 'PLAYING') {
+          this.onHostSnapshot?.(this.exportSnapshot());
+        }
+      }
       return;
     }
 
@@ -343,6 +418,12 @@ export class GameManager {
       this.bombManager.update(this.map, () => {});
       this.particles.update();
       this.input.endFrame();
+      if (this.isOnlineHost) {
+        this.syncTickCounter++;
+        if (this.syncTickCounter % 3 === 0) {
+          this.onHostSnapshot?.(this.exportSnapshot());
+        }
+      }
       return;
     }
 
@@ -354,6 +435,7 @@ export class GameManager {
       if (this.roundTimeSeconds === 45 && !this.isHurryUp) {
         this.isHurryUp = true;
         sounds.playHurry();
+        this.emitSound('hurry');
       }
       this.broadcastStats();
     }
@@ -382,26 +464,42 @@ export class GameManager {
     this.updateWindSlashes();
     this.updateTempestZones();
 
-    // 1. Human (1P) input, movement, skill, and ultra
-    const p1 = this.players.find((p) => p.config.isHuman);
-    if (p1 && p1.isAlive) {
-      if (!p1.isTackling && p1.slashSequenceTimer <= 0) {
-        p1.move(p1Input.dx, p1Input.dy, this.map, this.bombManager, (kickedBomb) => {
+    // 1. Human players (1P + any Online Remote Guests) input, movement, skill, and ultra
+    const p1 = this.players.find((p) => p.config.id === 0 && p.config.isHuman);
+    for (const hp of this.players) {
+      if (!hp.config.isHuman || !hp.isAlive) continue;
+
+      let hInput: RemoteInputPayload;
+      if (hp.config.id === 0) {
+        hInput = p1Input;
+      } else {
+        const remote = this.remoteInputs.get(hp.config.id);
+        if (!remote) continue;
+        hInput = { ...remote };
+        // Consume one-shot button presses
+        remote.bomb = false;
+        remote.skill = false;
+        remote.ultra = false;
+      }
+
+      if (!hp.isTackling && hp.slashSequenceTimer <= 0) {
+        hp.move(hInput.dx, hInput.dy, this.map, this.bombManager, () => {
           sounds.playKick();
+          this.emitSound('kick');
         });
 
-        if (p1Input.bomb) {
-          this.tryPlaceBomb(p1);
+        if (hInput.bomb) {
+          this.tryPlaceBomb(hp);
         }
 
-        if (p1Input.skill) {
-          if (this.tryUseSkill(p1) && p1.isTackling) {
-            this.updatePlayerTackle(p1);
+        if (hInput.skill) {
+          if (this.tryUseSkill(hp) && hp.isTackling) {
+            this.updatePlayerTackle(hp);
           }
         }
-        if (p1Input.ultra) {
-          if (this.tryUseUltra(p1) && p1.isTackling) {
-            this.updatePlayerTackle(p1);
+        if (hInput.ultra) {
+          if (this.tryUseUltra(hp) && hp.isTackling) {
+            this.updatePlayerTackle(hp);
           }
         }
       }
@@ -432,6 +530,7 @@ export class GameManager {
       this.map,
       (explodedBomb) => {
         sounds.playExplosion();
+        this.emitSound('explosion');
         this.particles.triggerShake(5, 12);
         this.particles.addExplosionParticles(explodedBomb.pixelX, explodedBomb.pixelY, 18);
 
@@ -1252,5 +1351,131 @@ export class GameManager {
     }
 
     ctx.restore();
+  }
+
+  public exportSnapshot(): GameSnapshot {
+    return {
+      state: this.state,
+      round: this.round,
+      roundTimeSeconds: this.roundTimeSeconds,
+      countdownTimer: this.countdownTimer,
+      overheadTagTimer: this.overheadTagTimer,
+      roundOverTimer: this.roundOverTimer,
+      isHurryUp: this.isHurryUp,
+      scores: [...this.scores],
+      winnerId: this.roundWinner ? this.roundWinner.config.id : null,
+      grid: this.map.grid.map((row) => [...row]),
+      activeItems: this.map.activeItems.map((it) => ({ ...it })),
+      bombs: this.bombManager.bombs.map((b) => ({
+        id: b.id,
+        tileX: b.tileX,
+        tileY: b.tileY,
+        pixelX: b.pixelX,
+        pixelY: b.pixelY,
+        ownerId: b.ownerId,
+        power: b.power,
+        fuseTimer: b.fuseTimer,
+        maxFuseTime: b.maxFuseTime,
+        isMega: Boolean(b.isMega),
+        isSliding: b.isSliding,
+        slideDx: b.slideDx,
+        slideDy: b.slideDy,
+      })),
+      explosions: this.bombManager.explosions.cells.map((c) => ({ ...c })),
+      players: this.players.map((p) => ({
+        id: p.config.id,
+        x: p.x,
+        y: p.y,
+        facing: p.facing,
+        animFrame: p.animFrame,
+        isMoving: p.isMoving,
+        isAlive: p.isAlive,
+        deathTimer: p.deathTimer,
+        stunTimer: p.stunTimer,
+        invulnerableTimer: p.invulnerableTimer,
+        maxBombs: p.maxBombs,
+        activeBombs: p.activeBombs,
+        power: p.power,
+        hasKick: p.hasKick,
+        shield: p.shield,
+        skillCooldownTimer: p.skillCooldownTimer,
+        ultraGauge: p.ultraGauge,
+        hasMegaBomb: p.hasMegaBomb,
+        isTackling: p.isTackling,
+        tackleSlashMode: p.tackleSlashMode,
+        tackleSlashTick: p.tackleSlashTick,
+        slashSequenceTimer: p.slashSequenceTimer,
+      })),
+      windSlashes: this.activeWindSlashes.map((ws) => ({
+        ownerId: ws.ownerId,
+        x: ws.x,
+        y: ws.y,
+        dx: ws.dx,
+        dy: ws.dy,
+        tick: ws.tick,
+      })),
+      tempestZones: this.activeTempestZones.map((tz) => ({ ...tz })),
+    };
+  }
+
+  public applySnapshot(snap: GameSnapshot) {
+    this.state = snap.state;
+    this.round = snap.round;
+    this.roundTimeSeconds = snap.roundTimeSeconds;
+    this.countdownTimer = snap.countdownTimer;
+    this.overheadTagTimer = snap.overheadTagTimer;
+    this.roundOverTimer = snap.roundOverTimer;
+    this.isHurryUp = snap.isHurryUp;
+    this.scores = [...snap.scores];
+    this.roundWinner = snap.winnerId !== null
+      ? (this.players.find((p) => p.config.id === snap.winnerId) || null)
+      : null;
+
+    if (snap.grid && snap.grid.length > 0) {
+      this.map.grid = snap.grid.map((row) => [...row]);
+    }
+    this.map.activeItems = snap.activeItems.map((it) => ({ ...it }));
+
+    this.bombManager.bombs = snap.bombs.map((b) => ({
+      ...b,
+      ignoredPlayerIds: new Set<number>(),
+    }));
+    this.bombManager.explosions.cells = snap.explosions.map((c) => ({ ...c }));
+
+    for (const sp of snap.players) {
+      const p = this.players.find((pl) => pl.config.id === sp.id);
+      if (!p) continue;
+      p.x = sp.x;
+      p.y = sp.y;
+      p.facing = sp.facing;
+      p.animFrame = sp.animFrame;
+      p.isMoving = sp.isMoving;
+      p.isAlive = sp.isAlive;
+      p.deathTimer = sp.deathTimer;
+      p.stunTimer = sp.stunTimer;
+      p.invulnerableTimer = sp.invulnerableTimer;
+      p.maxBombs = sp.maxBombs;
+      p.activeBombs = sp.activeBombs;
+      p.power = sp.power;
+      p.hasKick = sp.hasKick;
+      p.shield = sp.shield;
+      p.skillCooldownTimer = sp.skillCooldownTimer;
+      p.ultraGauge = sp.ultraGauge;
+      p.hasMegaBomb = sp.hasMegaBomb;
+      p.isTackling = sp.isTackling;
+      p.tackleSlashMode = sp.tackleSlashMode;
+      p.tackleSlashTick = sp.tackleSlashTick;
+      p.slashSequenceTimer = sp.slashSequenceTimer;
+    }
+
+    this.activeWindSlashes = snap.windSlashes.map((ws) => ({
+      ...ws,
+      remainingDist: 0,
+      speed: 0,
+      hitEnemies: new Set<number>(),
+    }));
+    this.activeTempestZones = snap.tempestZones.map((tz) => ({ ...tz }));
+
+    this.broadcastStats();
   }
 }

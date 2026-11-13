@@ -61,8 +61,21 @@
         <div id="setupScreen" class="screen-overlay hidden">
           <div class="setup-box">
             <div class="setup-header">
-              <h2>⚔️ プレイヤーセットアップ (Player Setup)</h2>
-              <span class="setup-sub">上のキャラ一覧から選択 (🎮 十字:移動 / A:決定 / X:1P・COM切替 / LB・RB:枠切替 / Start:開始)</span>
+              <h2>⚔️ プレイヤーセットアップ</h2>
+              <div id="modeTabs" class="mode-tabs">
+                <button id="btnModeLocal" type="button" class="mode-tab active">🏠 ローカル対戦</button>
+                <button id="btnModeOnline" type="button" class="mode-tab">🌐 オンライン対戦</button>
+              </div>
+            </div>
+            <div id="onlineBar" class="online-bar hidden">
+              <div class="online-status-row">
+                <span id="onlineStatusBadge" class="online-badge">未接続</span>
+                <span id="onlineSubHint" class="setup-sub"></span>
+              </div>
+              <div id="onlineInviteRow" class="online-invite-row hidden">
+                <input id="inviteUrlInput" class="invite-url-input" type="text" readonly value="" />
+                <button id="btnCopyInvite" type="button" class="action-btn highlight-btn">📋 招待URLコピー</button>
+              </div>
             </div>
             <div id="setupRoster" class="setup-roster">
               <!-- Dynamically populated 2-row character icon roster -->
@@ -82,6 +95,7 @@
         <div id="pauseScreen" class="screen-overlay hidden">
           <div class="pause-box">
             <h2>⏸ PAUSED</h2>
+            <div id="pauseGuestNotice" class="pause-guest-notice hidden">ホスト (1P) がポーズ中です...</div>
             <div id="pauseMenuList" class="pause-menu-list">
               <button type="button" class="pause-menu-btn" data-action="resume">▶ ゲーム再開</button>
               <button type="button" class="pause-menu-btn" data-action="retry">🔄 リトライ</button>
@@ -92,7 +106,7 @@
               <button type="button" class="pause-menu-btn" data-action="title">🏠 タイトルへ</button>
               <button type="button" class="pause-menu-btn" data-action="fullscreen" id="pauseBtnFullscreen">⛶ 全画面切替</button>
             </div>
-            <div class="pause-hint">十字キー:選択 / A:決定 / B・Start・P:再開</div>
+            <div id="pauseHint" class="pause-hint">十字キー:選択 / A:決定 / B・Start・P:再開</div>
           </div>
         </div>
       </div>

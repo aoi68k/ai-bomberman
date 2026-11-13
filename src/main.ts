@@ -6,6 +6,7 @@ import { sounds } from './audio';
 import { GamepadInfo, MenuInput } from './input';
 import { assets } from './assets';
 import { CHARACTERS, PLAYER_SLOT_COLORS, loadCharacters } from './constants';
+import { NetworkManager, SoundEventName } from './network';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
@@ -17,6 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await assets.loadAll();
 
   const game = new GameManager(canvas);
+  const net = new NetworkManager();
 
   // UI Elements
   const timerBadge = document.getElementById('timerBadge') as HTMLElement;
@@ -35,6 +37,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const setupScreen = document.getElementById('setupScreen') as HTMLElement;
   const pauseScreen = document.getElementById('pauseScreen') as HTMLElement;
   const btnPauseOverlay = document.getElementById('btnPauseOverlay') as HTMLButtonElement;
+  const pauseMenuList = document.getElementById('pauseMenuList') as HTMLElement;
+  const pauseHint = document.getElementById('pauseHint') as HTMLElement;
+  const pauseGuestNotice = document.getElementById('pauseGuestNotice') as HTMLElement;
   const pauseMenuBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('#pauseMenuList .pause-menu-btn'));
   const pauseBtnBgm = document.getElementById('pauseBtnBgm') as HTMLButtonElement;
   const pauseBtnSfx = document.getElementById('pauseBtnSfx') as HTMLButtonElement;
@@ -47,6 +52,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnBackToTitle = document.getElementById('btnBackToTitle') as HTMLButtonElement;
   const btnBattleStart = document.getElementById('btnBattleStart') as HTMLButtonElement;
 
+  const btnModeLocal = document.getElementById('btnModeLocal') as HTMLButtonElement;
+  const btnModeOnline = document.getElementById('btnModeOnline') as HTMLButtonElement;
+  const onlineBar = document.getElementById('onlineBar') as HTMLElement;
+  const onlineStatusBadge = document.getElementById('onlineStatusBadge') as HTMLElement;
+  const onlineSubHint = document.getElementById('onlineSubHint') as HTMLElement;
+  const onlineInviteRow = document.getElementById('onlineInviteRow') as HTMLElement;
+  const inviteUrlInput = document.getElementById('inviteUrlInput') as HTMLInputElement;
+  const btnCopyInvite = document.getElementById('btnCopyInvite') as HTMLButtonElement;
+
   const charList = Object.values(CHARACTERS);
   const draftSlots = game.playerSlots.map((s) => ({ ...s }));
   const slotColors = PLAYER_SLOT_COLORS;
@@ -58,6 +72,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   let showPadFocus = false;
 
   const setSlotControl = (idx: number, nextCtrl: '1P' | 'COM' | 'OFF') => {
+    if (net.role === 'GUEST') return;
+    if (draftSlots[idx].control === 'REMOTE') return;
     if (nextCtrl === '1P') {
       draftSlots.forEach((other, oIdx) => {
         if (oIdx !== idx && other.control === '1P') {
@@ -66,19 +82,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
     draftSlots[idx].control = nextCtrl;
+    if (net.role === 'HOST') {
+      net.broadcastLobbySync(draftSlots);
+    }
   };
 
   const renderSetupGrid = () => {
     setupRoster.innerHTML = '';
     setupGrid.innerHTML = '';
 
-    const activeCount = draftSlots.filter((s) => s.control !== 'OFF').length;
-    if (activeCount < 2) {
-      setupValidationMsg.textContent = '2人以上参加させてください';
+    const isGuest = net.role === 'GUEST';
+    const isHost = net.role === 'HOST';
+
+    if (isGuest) {
+      activeSlotIdx = net.assignedSlot;
       btnBattleStart.disabled = true;
-    } else {
+      btnBattleStart.textContent = '⏳ ホスト開始待ち...';
       setupValidationMsg.textContent = '';
-      btnBattleStart.disabled = false;
+    } else {
+      btnBattleStart.textContent = '⚔️ BATTLE START!';
+      const activeCount = draftSlots.filter((s) => s.control !== 'OFF').length;
+      if (activeCount < 2) {
+        setupValidationMsg.textContent = '2人以上参加させてください';
+        btnBattleStart.disabled = true;
+      } else {
+        setupValidationMsg.textContent = '';
+        btnBattleStart.disabled = false;
+      }
     }
 
     btnBackToTitle.classList.toggle('pad-focused', showPadFocus && setupArea === 'footer' && footerFocus === 0);
@@ -116,7 +146,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       item.addEventListener('click', () => {
         showPadFocus = false;
         rosterFocus = cIdx;
-        draftSlots[activeSlotIdx].charId = charInfo.charId;
+        if (isGuest) {
+          draftSlots[net.assignedSlot].charId = charInfo.charId;
+          net.sendCharSelect(charInfo.charId);
+        } else {
+          draftSlots[activeSlotIdx].charId = charInfo.charId;
+          if (isHost) {
+            net.broadcastLobbySync(draftSlots);
+          }
+        }
         renderSetupGrid();
       });
 
@@ -130,7 +168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         charList.findIndex((c) => c.charId === slot.charId)
       );
       const charInfo = charList[charIdx] || charList[0];
-      const slotColor = slotColors[idx] || '#38bdf8';
+      const slotColor = slotColors[idx] || '#ffcf00';
 
       const portraitImg = assets.getImage(`portrait_${charInfo.charId}` as any);
       const portraitSrc = portraitImg
@@ -142,37 +180,48 @@ document.addEventListener('DOMContentLoaded', async () => {
       slotEl.className = `setup-slot ${slot.control === 'OFF' ? 'is-off' : ''} ${isEditing ? 'is-editing' : ''}`;
       slotEl.style.borderColor = slot.control === 'OFF' ? '#334155' : slotColor;
 
+      const isRemote = slot.control === 'REMOTE';
+      const controlToggleHtml = isRemote
+        ? `<div class="control-toggle-group"><span class="ctrl-btn active-remote">🌐 ${idx + 1}P</span></div>`
+        : isGuest
+          ? `<div class="control-toggle-group"><span class="ctrl-btn ${slot.control === '1P' ? 'active-1p' : slot.control === 'COM' ? 'active-com' : 'active-off'}">${slot.control}</span></div>`
+          : `<div class="control-toggle-group">
+              ${idx === 0 && isHost ? '<span class="ctrl-btn active-1p">1P (HOST)</span>' : `
+                <button type="button" class="ctrl-btn ${slot.control === '1P' ? 'active-1p' : ''}" data-ctrl="1P">1P</button>
+                <button type="button" class="ctrl-btn ${slot.control === 'COM' ? 'active-com' : ''}" data-ctrl="COM">COM</button>
+                <button type="button" class="ctrl-btn ${slot.control === 'OFF' ? 'active-off' : ''}" data-ctrl="OFF">OFF</button>
+              `}
+            </div>`;
+
       slotEl.innerHTML = `
         <div class="setup-slot-top">
           <span class="setup-slot-label" style="color: ${slotColor}">
             PLAYER ${idx + 1}
-            ${isEditing ? `<span class="editing-tag" style="background: ${slotColor}">選択中</span>` : ''}
+            ${isEditing ? `<span class="editing-tag" style="background: ${slotColor}">${isGuest ? 'あなた' : '選択中'}</span>` : ''}
           </span>
-          <div class="control-toggle-group">
-            <button type="button" class="ctrl-btn ${slot.control === '1P' ? 'active-1p' : ''}" data-ctrl="1P">1P</button>
-            <button type="button" class="ctrl-btn ${slot.control === 'COM' ? 'active-com' : ''}" data-ctrl="COM">COM</button>
-            <button type="button" class="ctrl-btn ${slot.control === 'OFF' ? 'active-off' : ''}" data-ctrl="OFF">OFF</button>
-          </div>
+          ${controlToggleHtml}
         </div>
         <div class="setup-char-row">
           <img src="${portraitSrc}" alt="${charInfo.jpName}" class="setup-portrait" style="border-color: ${slotColor}" />
           <div class="setup-char-details">
             <div class="setup-char-name">${charInfo.jpName}</div>
             <div class="setup-skill-mini">${charInfo.skillName}</div>
-            <div class="setup-skill-mini" style="color: #38bdf8;">${charInfo.ultraName}</div>
+            <div class="setup-skill-mini" style="color: #ffcf00;">${charInfo.ultraName}</div>
           </div>
         </div>
       `;
 
       slotEl.addEventListener('click', () => {
+        if (isGuest) return;
         showPadFocus = false;
         activeSlotIdx = idx;
         renderSetupGrid();
       });
 
-      slotEl.querySelectorAll<HTMLButtonElement>('.ctrl-btn').forEach((btn) => {
+      slotEl.querySelectorAll<HTMLButtonElement>('button.ctrl-btn').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (isGuest) return;
           showPadFocus = false;
           activeSlotIdx = idx;
           setSlotControl(idx, btn.dataset.ctrl as '1P' | 'COM' | 'OFF');
@@ -184,6 +233,168 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   };
 
+  const switchToLocalMode = () => {
+    net.disconnect();
+    game.isOnlineHost = false;
+    game.isOnlineGuest = false;
+    draftSlots.forEach((s, idx) => {
+      if (s.control === 'REMOTE') {
+        s.control = idx === 0 ? '1P' : 'COM';
+      }
+    });
+    btnModeLocal.classList.add('active');
+    btnModeOnline.classList.remove('active');
+    onlineBar.classList.add('hidden');
+    onlineInviteRow.classList.add('hidden');
+    renderSetupGrid();
+  };
+
+  const switchToOnlineMode = async () => {
+    if (net.role === 'HOST' || net.role === 'GUEST') return;
+    btnModeLocal.classList.remove('active');
+    btnModeOnline.classList.add('active');
+    onlineBar.classList.remove('hidden');
+    onlineInviteRow.classList.add('hidden');
+    onlineSubHint.textContent = '招待URLを相手に送って参加を待ってください';
+    game.isOnlineHost = true;
+    game.isOnlineGuest = false;
+
+    // Ensure slot 0 is 1P (Host)
+    draftSlots.forEach((s, idx) => {
+      if (idx === 0) s.control = '1P';
+      else if (s.control === '1P') s.control = 'COM';
+    });
+    renderSetupGrid();
+
+    try {
+      await net.createRoom(
+        () => draftSlots,
+        (slotIdx) => {
+          if (draftSlots[slotIdx]) {
+            draftSlots[slotIdx].control = 'REMOTE';
+          }
+          renderSetupGrid();
+        },
+        (slotIdx) => {
+          if (draftSlots[slotIdx]) {
+            draftSlots[slotIdx].control = 'COM';
+          }
+          renderSetupGrid();
+        }
+      );
+      inviteUrlInput.value = net.getInviteUrl();
+      onlineInviteRow.classList.remove('hidden');
+    } catch {
+      onlineSubHint.textContent = 'ルーム作成に失敗しました。再度お試しください。';
+    }
+  };
+
+  net.onStatusChange = (status, isConnected) => {
+    onlineStatusBadge.textContent = status;
+    onlineStatusBadge.classList.toggle('connected', isConnected);
+  };
+
+  net.onLobbyUpdate = (connectedSlots) => {
+    onlineSubHint.textContent =
+      connectedSlots.length > 0
+        ? `オンライン参加者: ${connectedSlots.map((s) => `${s + 1}P`).join(', ')}`
+        : '招待URLを相手に送って参加を待ってください';
+    renderSetupGrid();
+  };
+
+  net.onRemoteCharSelect = (slotIdx, charId) => {
+    if (draftSlots[slotIdx]) {
+      draftSlots[slotIdx].charId = charId;
+      net.broadcastLobbySync(draftSlots);
+      renderSetupGrid();
+    }
+  };
+
+  net.onRemoteInput = (slotIdx, inp) => {
+    game.setRemoteInput(slotIdx, inp);
+  };
+
+  net.onGuestWelcome = (assignedSlot, slots) => {
+    for (let i = 0; i < 4; i++) {
+      if (slots[i]) draftSlots[i] = { ...slots[i] };
+    }
+    activeSlotIdx = assignedSlot;
+    onlineSubHint.textContent = `あなたは ${assignedSlot + 1}P です。キャラを選んでホストの開始をお待ちください`;
+    renderSetupGrid();
+  };
+
+  net.onGuestLobbySync = (slots) => {
+    for (let i = 0; i < 4; i++) {
+      if (slots[i]) draftSlots[i] = { ...slots[i] };
+    }
+    renderSetupGrid();
+  };
+
+  net.onGuestStartGame = (slots) => {
+    titleScreen.classList.add('hidden');
+    setupScreen.classList.add('hidden');
+    game.isOnlineHost = false;
+    game.isOnlineGuest = true;
+    game.setPlayerSlots(slots);
+    sounds.enableAudio();
+    game.startGame();
+  };
+
+  net.onGuestSnapshot = (snap) => {
+    game.applySnapshot(snap);
+  };
+
+  net.onSoundEvent = (ev: SoundEventName) => {
+    switch (ev) {
+      case 'explosion':
+        sounds.playExplosion();
+        break;
+      case 'kick':
+        sounds.playKick();
+        break;
+      case 'hurry':
+        sounds.playHurry();
+        break;
+      case 'placeBomb':
+        sounds.playBombDrop();
+        break;
+      case 'death':
+        sounds.playDeath();
+        break;
+      case 'roundOver':
+        sounds.playWin();
+        break;
+    }
+  };
+
+  net.onDisconnect = (reason) => {
+    alert(reason);
+    switchToLocalMode();
+    showSetupScreen();
+  };
+
+  game.onHostSnapshot = (snap) => net.broadcastSnapshot(snap);
+  game.onHostSound = (ev) => net.broadcastSound(ev);
+  game.onGuestSendInput = (inp) => net.sendInput(inp);
+
+  btnModeLocal.addEventListener('click', switchToLocalMode);
+  btnModeOnline.addEventListener('click', switchToOnlineMode);
+
+  btnCopyInvite.addEventListener('click', async () => {
+    const url = inviteUrlInput.value;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      btnCopyInvite.textContent = '✅ コピー済み!';
+      setTimeout(() => {
+        btnCopyInvite.textContent = '📋 招待URLコピー';
+      }, 2000);
+    } catch {
+      inviteUrlInput.select();
+      document.execCommand('copy');
+    }
+  });
+
   const showTitleScreen = () => {
     titleScreen.classList.remove('hidden');
     setupScreen.classList.add('hidden');
@@ -193,11 +404,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const showSetupScreen = () => {
     titleScreen.classList.add('hidden');
     setupScreen.classList.remove('hidden');
-    activeSlotIdx = 0;
+    activeSlotIdx = net.role === 'GUEST' ? net.assignedSlot : 0;
     setupArea = 'roster';
     rosterFocus = Math.max(
       0,
-      charList.findIndex((c) => c.charId === draftSlots[0]?.charId)
+      charList.findIndex((c) => c.charId === draftSlots[activeSlotIdx]?.charId)
     );
     showPadFocus = game.input.getConnectedGamepads().some((p) => p.connected);
     game.showSetup();
@@ -205,10 +416,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   const startBattleFromSetup = () => {
+    if (net.role === 'GUEST') return;
     titleScreen.classList.add('hidden');
     setupScreen.classList.add('hidden');
     game.setPlayerSlots(draftSlots);
+    if (net.role === 'HOST') {
+      net.broadcastStartGame(draftSlots);
+    }
     game.startGame();
+    if (net.role === 'HOST') {
+      net.broadcastSnapshot(game.exportSnapshot());
+    }
   };
 
   btnStartSetup.addEventListener('click', showSetupScreen);
@@ -639,7 +857,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindTouch('btnSkillTouch', 'KeyE');
   bindTouch('btnUltraTouch', 'KeyQ');
 
-  // Start on Title Screen -> Player Setup -> Battle
-  showTitleScreen();
+  // Start on Title Screen -> Player Setup -> Battle (or auto-join if ?room= is present)
+  const roomParam = new URLSearchParams(window.location.search).get('room');
+  if (roomParam) {
+    game.isOnlineHost = false;
+    game.isOnlineGuest = true;
+    btnModeLocal.classList.remove('active');
+    btnModeOnline.classList.add('active');
+    onlineBar.classList.remove('hidden');
+    onlineInviteRow.classList.add('hidden');
+    onlineSubHint.textContent = `ルーム ${roomParam.toUpperCase()} へ接続中...`;
+    showSetupScreen();
+    net.joinRoom(roomParam).catch(() => {
+      alert('ルームが見つからないか、接続に失敗しました。');
+      switchToLocalMode();
+      showSetupScreen();
+    });
+  } else {
+    showTitleScreen();
+  }
   game.startLoop();
 });
