@@ -101,6 +101,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.style.borderLeft = `4px solid ${p.config.accentColor}`;
 
       const stars = '⭐'.repeat(stats.scores[p.config.id] || 0);
+      const gaugePct = Math.min(100, (p.ultraGauge / 10) * 100);
+      const isUltraReady = p.ultraGauge >= 10;
 
       card.innerHTML = `
         <div class="player-card-header">
@@ -113,6 +115,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span class="p-stat-item" title="Speed">👟${p.speed.toFixed(1)}</span>
           ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
           ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
+        </div>
+        <div title="超技ゲージ: ${p.ultraGauge}/10 (ボム設置で+1)" style="width: 100%; height: 4px; background: #0f172a; border-radius: 2px; overflow: hidden; margin-top: 2px;">
+          <div style="width: ${gaugePct}%; height: 100%; background: ${isUltraReady ? '#ef4444' : '#38bdf8'}; box-shadow: ${isUltraReady ? '0 0 6px #ef4444' : 'none'}; transition: width 0.15s ease;"></div>
         </div>
       `;
       hudPlayers.appendChild(card);

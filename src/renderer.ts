@@ -549,14 +549,14 @@ export class GameRenderer {
     }
 
     // Ready Fireflies orbiting around the player:
-    // Yellow = Skill ready, Red = Ultra skill ready, Hidden = On cooldown
+    // Yellow = Skill ready, Red = Ultra skill ready (gauge 10/10), Hidden = On cooldown / charging
     if (p.isAlive) {
       const now = Date.now();
       const baseAngle = now / 520 + p.config.id * 1.7;
       if (p.skillCooldownTimer <= 0) {
         this.drawFirefly(ctx, baseAngle, now, '#facc15', '#fef08a', 0);
       }
-      if (p.ultraCooldownTimer <= 0) {
+      if (p.ultraGauge >= 10) {
         this.drawFirefly(ctx, baseAngle + Math.PI, now, '#ef4444', '#fca5a5', 1.9);
       }
     }

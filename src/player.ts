@@ -34,7 +34,8 @@ export class Player {
 
   // Skill state
   public skillCooldownTimer: number = 0; // Cooldown frames remaining
-  public ultraCooldownTimer: number = 0; // Ultra skill cooldown frames remaining
+  public ultraCooldownTimer: number = 0; // Legacy cooldown frames (unused under gauge system)
+  public ultraGauge: number = 0; // Ultra gauge: +1 per bomb placed, 10 = ready to use ultra once
   public hasMegaBomb: boolean = false; // Next bomb will be mega bomb
   public lastPlacedBombId: number | null = null; // For remote detonate
 
@@ -83,6 +84,7 @@ export class Player {
     this.shield = 0;
     this.skillCooldownTimer = 0;
     this.ultraCooldownTimer = 0;
+    this.ultraGauge = 0;
     this.hasMegaBomb = false;
     this.lastPlacedBombId = null;
     this.isTackling = false;

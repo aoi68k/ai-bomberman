@@ -480,7 +480,11 @@ export class GameManager {
     if (bomb) {
       player.activeBombs++;
       player.lastPlacedBombId = bomb.id;
+      if (player.ultraGauge < 10) {
+        player.ultraGauge = Math.min(10, player.ultraGauge + 1);
+      }
       sounds.playBombDrop();
+      this.broadcastStats();
       return true;
     }
     return false;
@@ -612,7 +616,7 @@ export class GameManager {
    */
   public tryUseUltra(player: Player): boolean {
     if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
-    if (player.ultraCooldownTimer > 0) return false;
+    if (player.ultraGauge < 10) return false;
 
     const ultraType = player.config.ultraType;
     const dirs = {
@@ -626,13 +630,14 @@ export class GameManager {
     switch (ultraType) {
       case 'CHEN_TEMPEST_RUSH': {
         // Flurry of slashes while rushing forward 4 tiles (192px)
-        player.ultraCooldownTimer = player.config.ultraCooldown;
+        player.ultraGauge = 0;
         player.startTackle(dx, dy, 4 * 48, 6.0, false, 'ultra_tempest');
         this.performSlashHit(player, dx, dy, false, true);
         this.particles.triggerShake(5, 16);
         if (player.config.id === 0) {
           this.input.vibrate(0, 260, 0.8, 0.5);
         }
+        this.broadcastStats();
         return true;
       }
 
@@ -644,10 +649,11 @@ export class GameManager {
           player.x = targetTx * 48 + 24;
           player.y = targetTy * 48 + 24;
           player.invulnerableTimer = Math.max(player.invulnerableTimer, 60);
-          player.ultraCooldownTimer = player.config.ultraCooldown;
+          player.ultraGauge = 0;
           sounds.playKick();
           this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
           if (player.config.id === 0) this.input.vibrate(0, 150, 0.6, 0.3);
+          this.broadcastStats();
           return true;
         }
         return false;
@@ -660,9 +666,10 @@ export class GameManager {
             b.timer = 1;
             this.particles.addItemGetParticles(b.pixelX, b.pixelY, '#ef4444');
           }
-          player.ultraCooldownTimer = player.config.ultraCooldown;
+          player.ultraGauge = 0;
           sounds.playHurry();
           if (player.config.id === 0) this.input.vibrate(0, 200, 0.7, 0.4);
+          this.broadcastStats();
           return true;
         }
         return false;
@@ -677,11 +684,12 @@ export class GameManager {
         if (bomb) {
           player.activeBombs++;
           player.lastPlacedBombId = bomb.id;
-          player.ultraCooldownTimer = player.config.ultraCooldown;
+          player.ultraGauge = 0;
           sounds.playHurry();
           this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
           this.particles.triggerShake(4, 10);
           if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.4);
+          this.broadcastStats();
           return true;
         }
         return false;
@@ -690,10 +698,11 @@ export class GameManager {
       case 'ULTRA_FORTRESS': {
         player.shield = 2;
         player.invulnerableTimer = Math.max(player.invulnerableTimer, 120);
-        player.ultraCooldownTimer = player.config.ultraCooldown;
+        player.ultraGauge = 0;
         sounds.playShieldBreak();
         this.particles.addItemGetParticles(player.x, player.y, '#10b981');
         if (player.config.id === 0) this.input.vibrate(0, 180, 0.6, 0.3);
+        this.broadcastStats();
         return true;
       }
 
@@ -702,10 +711,11 @@ export class GameManager {
           return false;
         }
         player.startTackle(dx, dy, 3 * 48, 6.0, true, 'none');
-        player.ultraCooldownTimer = player.config.ultraCooldown;
+        player.ultraGauge = 0;
         sounds.playKick();
         this.particles.addItemGetParticles(player.x, player.y, '#a855f7');
         if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.3);
+        this.broadcastStats();
         return true;
       }
     }
