@@ -3,6 +3,8 @@
 ブラウザで快適に動く、レトロアーケードスタイルのボンバーマンライク対戦ゲームです。
 スマートなCOM AIとの対戦、HTML5 Gamepad APIによる本格的なコントローラー操作（バイブレーション対応）、Web Audio APIによるレトロサウンドを完備しています。
 
+🎮 **Play Now (GitHub Pages)**: https://aoi68k.github.io/ai-bomberman/
+
 ![Preview](https://raw.githubusercontent.com/aoi68k/ai-bomberman/main/preview.png)
 
 ## ✨ 特徴 (Features)

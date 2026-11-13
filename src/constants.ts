@@ -113,7 +113,7 @@ export async function loadCharacters(): Promise<void> {
       let charData: CharacterInfo | null = null;
       // Try live fetch first (so runtime edits to character.json are reflected immediately on HTTP server)
       try {
-        const res = await fetch(`/assets/images/characters/${folderName}/character.json`, { cache: 'no-store' });
+        const res = await fetch(`assets/images/characters/${folderName}/character.json`, { cache: 'no-store' });
         if (res.ok) {
           charData = (await res.json()) as CharacterInfo;
         }

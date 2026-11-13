@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.className = `char-card ${isSelected ? 'selected' : ''}`;
 
       const portraitImg = assets.getImage(`portrait_${c.id}` as any);
-      const portraitSrc = portraitImg ? portraitImg.src : `/assets/images/characters/${c.folder}/idle.png`;
+      const portraitSrc = portraitImg ? portraitImg.src : `assets/images/characters/${c.folder}/idle.png`;
 
       card.innerHTML = `
         <img src="${portraitSrc}" alt="${c.name}" class="char-portrait" />
