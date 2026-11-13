@@ -548,17 +548,21 @@ export class GameRenderer {
       }
     }
 
-    // Ready Fireflies orbiting around the player:
-    // Yellow = Skill ready, Red = Ultra skill ready (gauge 10/10), Hidden = On cooldown / charging
+    // Cooldown / Charge Fireflies orbiting around the player:
+    // Yellow = Skill, Red = Ultra skill
+    // Dim & gradually brightening while charging (0%..99%), distinctly glowing with aura & trail when 100% ready
     if (p.isAlive) {
       const now = Date.now();
       const baseAngle = now / 520 + p.config.id * 1.7;
-      if (p.skillCooldownTimer <= 0) {
-        this.drawFirefly(ctx, baseAngle, now, '#facc15', '#fef08a', 0);
-      }
-      if (p.ultraGauge >= 10) {
-        this.drawFirefly(ctx, baseAngle + Math.PI, now, '#ef4444', '#fca5a5', 1.9);
-      }
+
+      const skillProgress =
+        p.skillCooldownTimer <= 0
+          ? 1
+          : Math.max(0, Math.min(0.999, 1 - p.skillCooldownTimer / Math.max(1, p.config.skillCooldown)));
+      this.drawFirefly(ctx, baseAngle, now, '#facc15', '#785e10', '#ffffff', 0, skillProgress);
+
+      const ultraProgress = Math.max(0, Math.min(1, p.ultraGauge / 10));
+      this.drawFirefly(ctx, baseAngle + Math.PI, now, '#ef4444', '#7f1d1d', '#ffffff', 1.9, ultraProgress);
     }
 
     // Name Tag over head
@@ -574,56 +578,84 @@ export class GameRenderer {
     ctx: CanvasRenderingContext2D,
     angle: number,
     now: number,
-    color: string,
+    readyColor: string,
+    dimColor: string,
     coreColor: string,
-    phaseOffset: number
+    phaseOffset: number,
+    progress: number
   ) {
     const rx = 22;
     const ry = 13;
     const baseY = -6;
-    const pulse = 0.72 + 0.28 * Math.sin(now / 180 + phaseOffset);
+    const isReady = progress >= 1;
 
     const getPos = (a: number, t: number) => ({
       x: Math.cos(a) * rx,
       y: baseY + Math.sin(a) * ry + Math.sin(t * 2.2 + phaseOffset) * 3.5,
     });
 
-    // Subtle trailing particles behind the firefly
+    const pos = getPos(angle, now / 520);
+
+    if (!isReady) {
+      // Charging / Cooldown state (0%..99%): dim dot without glow or trail, gradually brightening with progress
+      const alpha = 0.2 + 0.45 * progress;
+      const radius = 1.6 + 0.8 * progress;
+      ctx.save();
+      // Subtle dim body
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = dimColor;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius + 0.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gradually brightening inner tint as progress approaches 100%
+      ctx.globalAlpha = 0.1 + 0.4 * progress;
+      ctx.fillStyle = readyColor;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    // 100% Ready state: bright glowing firefly with trail, aura, and white-hot core
+    const pulse = 0.78 + 0.22 * Math.sin(now / 170 + phaseOffset);
+
+    // Trailing particles behind the ready firefly
     for (let i = 2; i >= 1; i--) {
       const trailPos = getPos(angle - i * 0.22, now / 520 - i * 0.22);
       ctx.save();
-      ctx.globalAlpha = (0.35 - i * 0.1) * pulse;
-      ctx.fillStyle = color;
+      ctx.globalAlpha = (0.4 - i * 0.12) * pulse;
+      ctx.fillStyle = readyColor;
       ctx.beginPath();
-      ctx.arc(trailPos.x, trailPos.y, 2.5 - i * 0.6, 0, Math.PI * 2);
+      ctx.arc(trailPos.x, trailPos.y, 2.6 - i * 0.6, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
 
-    const pos = getPos(angle, now / 520);
     ctx.save();
     // Outer soft glow
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10 * pulse;
-    ctx.globalAlpha = 0.45 * pulse;
-    ctx.fillStyle = color;
+    ctx.shadowColor = readyColor;
+    ctx.shadowBlur = 12 * pulse;
+    ctx.globalAlpha = 0.55 * pulse;
+    ctx.fillStyle = readyColor;
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 5.2, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, 5.8, 0, Math.PI * 2);
     ctx.fill();
 
     // Bright firefly body
-    ctx.globalAlpha = 0.95 * pulse;
-    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.98;
+    ctx.fillStyle = readyColor;
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 3.0, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, 3.2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Inner white-hot core
+    // Inner white-hot core (clearly distinguishes 100% ready from 99%)
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
     ctx.fillStyle = coreColor;
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, 1.7, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
