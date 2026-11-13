@@ -53,6 +53,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       role: c.role,
       skill: c.skillName,
       desc: c.skillDesc,
+      ultra: c.ultraName,
+      ultraDesc: c.ultraDesc,
     }));
 
     charList.forEach((c) => {
@@ -72,6 +74,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           <div class="char-skill-name">${c.skill}</div>
           <div class="char-skill-desc">${c.desc}</div>
+          <div class="char-skill-name" style="color: #38bdf8; margin-top: 2px;">${c.ultra}</div>
+          <div class="char-skill-desc">${c.ultraDesc}</div>
         </div>
       `;
 
@@ -88,7 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Render player cards
   const updatePlayerCards = (stats: GameStats) => {
     hudPlayers.innerHTML = '';
-    game.players.forEach((p, idx) => {
+    game.players.forEach((p) => {
       const card = document.createElement('div');
       card.className = `player-card ${p.isAlive ? '' : 'dead'}`;
       card.style.borderLeft = `4px solid ${p.config.accentColor}`;
@@ -96,8 +100,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       const stars = '⭐'.repeat(stats.scores[p.config.id] || 0);
 
       const skillSecs = Math.ceil(p.skillCooldownTimer / 60);
-      const skillText = p.skillCooldownTimer > 0 ? `⏳ ${skillSecs}s` : `⚡ READY`;
+      const skillText = p.skillCooldownTimer > 0 ? `⚡ ⏳${skillSecs}s` : `⚡ READY`;
       const skillColor = p.skillCooldownTimer > 0 ? '#94a3b8' : '#10b981';
+
+      const ultraSecs = Math.ceil(p.ultraCooldownTimer / 60);
+      const ultraText = p.ultraCooldownTimer > 0 ? `🌟 ⏳${ultraSecs}s` : `🌟 READY`;
+      const ultraColor = p.ultraCooldownTimer > 0 ? '#94a3b8' : '#38bdf8';
 
       card.innerHTML = `
         <div class="player-card-header">
@@ -111,8 +119,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           ${p.hasKick ? '<span class="p-stat-item" title="Kick">🥊</span>' : ''}
           ${p.shield > 0 ? `<span class="p-stat-item" title="Shield">🛡️${p.shield}</span>` : ''}
         </div>
-        <div style="font-size: 0.72rem; color: ${skillColor}; font-weight: 700; margin-top: 2px;">
-          ${skillText}
+        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 700; margin-top: 2px; gap: 4px;">
+          <span style="color: ${skillColor};" title="必殺技 (X / E)">${skillText}</span>
+          <span style="color: ${ultraColor};" title="超技 (Y / Q)">${ultraText}</span>
         </div>
       `;
       hudPlayers.appendChild(card);

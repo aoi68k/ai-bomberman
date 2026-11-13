@@ -339,7 +339,8 @@ export class GameManager {
           if (this.tryUseSkill(p1) && p1.isTackling) {
             this.updatePlayerTackle(p1);
           }
-        } else if (p1Input.ultra) {
+        }
+        if (p1Input.ultra) {
           if (this.tryUseUltra(p1) && p1.isTackling) {
             this.updatePlayerTackle(p1);
           }
