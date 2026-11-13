@@ -570,8 +570,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  const syncBgmBtnUI = (isPlaying: boolean) => {
+    const label = isPlaying ? '🎵 BGM: ON' : '🎵 BGM: OFF';
+    btnBgm.textContent = label;
+    btnBgm.style.borderColor = isPlaying ? 'var(--accent-emerald)' : '#334155';
+    if (pauseBtnBgm) pauseBtnBgm.textContent = label;
+  };
+
   btnFullscreen?.addEventListener('click', toggleFullscreen);
-  document.addEventListener('fullscreenchange', updateFullscreenBtn);
+  document.addEventListener('fullscreenchange', () => {
+    updateFullscreenBtn();
+    if (document.fullscreenElement && game.state === 'PLAYING') {
+      game.togglePause();
+    }
+  });
 
   // Popup Window mode
   const isPopup =
@@ -594,6 +606,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!win) {
       alert('ポップアップがブロックされました。ブラウザのポップアップ許可設定をご確認ください。');
     } else {
+      if (game.state === 'PLAYING') {
+        game.togglePause();
+      }
+      if (sounds.isBGMPlaying()) {
+        sounds.stopBGM();
+        syncBgmBtnUI(false);
+      }
       win.focus();
     }
   });
