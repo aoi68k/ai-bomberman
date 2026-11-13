@@ -1,0 +1,22 @@
+{
+  "charId": "yangyang",
+  "name": "Yangyang",
+  "jpName": "秧秧",
+  "role": "疾風 / 連撃",
+  "color": "#0d9488",
+  "subColor": "#ccfbf1",
+  "accentColor": "#2dd4bf",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 1,
+    "initialSpeed": 2.7
+  },
+  "skillType": "YANGYANG_WIND_SLASH",
+  "skillName": "⚡ 風鳴乱舞 (2マス斬撃)",
+  "skillDesc": "前方向に2マス、乱れ斬の斬撃を飛ばす。当たると2秒スタン。",
+  "skillCooldown": 480,
+  "ultraType": "YANGYANG_TEMPEST_ZONE",
+  "ultraName": "🌟 疾風万刃域 (3x3乱れ斬)",
+  "ultraDesc": "前方向1マス先を中心に3x3マスの乱れ斬エリアを4秒間発生。当たると2秒スタン。",
+  "ultraCooldown": 0
+}

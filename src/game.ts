@@ -55,6 +55,26 @@ export class GameManager {
   public suddenDeathTimer: number = 0;
   public suddenDeathPath: Array<{ x: number; y: number }> = [];
 
+  // Yangyang's ranged wind slashes and 3x3 tempest zones
+  public activeWindSlashes: Array<{
+    ownerId: number;
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+    remainingDist: number;
+    speed: number;
+    tick: number;
+    hitEnemies: Set<number>;
+  }> = [];
+
+  public activeTempestZones: Array<{
+    ownerId: number;
+    centerTx: number;
+    centerTy: number;
+    remainingFrames: number;
+  }> = [];
+
   private isRunning: boolean = false;
   private animFrameId: number | null = null;
 
@@ -163,6 +183,8 @@ export class GameManager {
     this.suddenDeathIndex = 0;
     this.suddenDeathTimer = 0;
     this.suddenDeathPath = this.generateSpiralPath();
+    this.activeWindSlashes = [];
+    this.activeTempestZones = [];
 
     for (const p of this.players) {
       p.reset();
@@ -322,6 +344,10 @@ export class GameManager {
         this.updatePlayerTackle(p);
       }
     }
+
+    // Update Yangyang's wind slashes and 3x3 tempest zones
+    this.updateWindSlashes();
+    this.updateTempestZones();
 
     // 1. Human (P1) input, movement, skill, and ultra
     const p1 = this.players[0];
@@ -606,6 +632,35 @@ export class GameManager {
         }
         return true;
       }
+
+      case 'YANGYANG_WIND_SLASH': {
+        // Send a flurry of wind slashes 2 tiles forward; hits stun for 2 seconds (120 frames)
+        const dirs = {
+          up: { dx: 0, dy: -1 },
+          down: { dx: 0, dy: 1 },
+          left: { dx: -1, dy: 0 },
+          right: { dx: 1, dy: 0 },
+        };
+        const { dx, dy } = dirs[player.facing];
+        player.skillCooldownTimer = player.config.skillCooldown;
+        this.activeWindSlashes.push({
+          ownerId: player.config.id,
+          x: player.x + dx * 16,
+          y: player.y + dy * 16,
+          dx,
+          dy,
+          remainingDist: 2 * 48,
+          speed: 8.0,
+          tick: 0,
+          hitEnemies: new Set(),
+        });
+        sounds.playKick();
+        this.particles.addItemGetParticles(player.x, player.y, '#2dd4bf');
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 120, 0.5, 0.25);
+        }
+        return true;
+      }
     }
 
     return false;
@@ -718,9 +773,120 @@ export class GameManager {
         this.broadcastStats();
         return true;
       }
+
+      case 'YANGYANG_TEMPEST_ZONE': {
+        // Create a 3x3 tempest slash zone centered 1 tile in front of Yangyang for 4 seconds (240 frames)
+        const centerTx = Math.max(1, Math.min(13, player.tileX + dx));
+        const centerTy = Math.max(1, Math.min(11, player.tileY + dy));
+        player.ultraGauge = 0;
+        this.activeTempestZones.push({
+          ownerId: player.config.id,
+          centerTx,
+          centerTy,
+          remainingFrames: 240,
+        });
+        sounds.playHurry();
+        this.particles.triggerShake(5, 16);
+        this.particles.addItemGetParticles(centerTx * 48 + 24, centerTy * 48 + 24, '#2dd4bf');
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 240, 0.8, 0.45);
+        }
+        this.broadcastStats();
+        return true;
+      }
     }
 
     return false;
+  }
+
+  /**
+   * Updates Yangyang's forward 2-tile wind slash projectiles (2s stun on hit)
+   */
+  private updateWindSlashes() {
+    for (let i = this.activeWindSlashes.length - 1; i >= 0; i--) {
+      const ws = this.activeWindSlashes[i];
+      const step = Math.min(ws.speed, ws.remainingDist);
+      ws.x += ws.dx * step;
+      ws.y += ws.dy * step;
+      ws.remainingDist -= step;
+      ws.tick++;
+
+      // Stop if hitting a solid wall tile
+      const tx = Math.floor(ws.x / 48);
+      const ty = Math.floor(ws.y / 48);
+      if (this.map.getTile(tx, ty) === 1) {
+        this.particles.addBlockDebris(ws.x, ws.y, 4);
+        this.activeWindSlashes.splice(i, 1);
+        continue;
+      }
+
+      // Flurry slash visuals every 2 frames
+      if (ws.tick % 2 === 1) {
+        const baseAngle = Math.atan2(ws.dy, ws.dx) + (Math.random() - 0.5) * 0.9;
+        const flip = ws.tick % 4 === 1;
+        this.particles.addSlashEffect(ws.x, ws.y, baseAngle, 34, flip ? '#2dd4bf' : '#99f6e4', flip);
+      }
+
+      // Hit check against opponents (2 seconds = 120 frames stun)
+      for (const other of this.players) {
+        if (other.isAlive && other.config.id !== ws.ownerId && !ws.hitEnemies.has(other.config.id)) {
+          if (Math.hypot(other.x - ws.x, other.y - ws.y) < 34) {
+            ws.hitEnemies.add(other.config.id);
+            other.stun(120);
+            this.particles.addItemGetParticles(other.x, other.y, '#2dd4bf');
+            this.particles.addExplosionParticles(other.x, other.y, 6);
+            this.particles.triggerShake(4, 8);
+            if (other.config.id === 0) {
+              this.input.vibrate(0, 220, 0.7, 0.35);
+            }
+          }
+        }
+      }
+
+      if (ws.remainingDist <= 0) {
+        this.activeWindSlashes.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * Updates Yangyang's 3x3 tempest slash zones (4s duration, 2s stun on hit)
+   */
+  private updateTempestZones() {
+    for (let i = this.activeTempestZones.length - 1; i >= 0; i--) {
+      const zone = this.activeTempestZones[i];
+      zone.remainingFrames--;
+
+      const centerPx = zone.centerTx * 48 + 24;
+      const centerPy = zone.centerTy * 48 + 24;
+
+      // Spawn flurry slash visuals across the 3x3 area
+      if (zone.remainingFrames % 4 === 0) {
+        const ox = centerPx + (Math.random() - 0.5) * 116;
+        const oy = centerPy + (Math.random() - 0.5) * 116;
+        const angle = Math.random() * Math.PI * 2;
+        const flip = Math.random() < 0.5;
+        this.particles.addSlashEffect(ox, oy, angle, 28, flip ? '#2dd4bf' : '#99f6e4', flip);
+      }
+
+      // Stun any opponent inside the 3x3 zone for 2 seconds (120 frames)
+      for (const other of this.players) {
+        if (other.isAlive && other.config.id !== zone.ownerId && other.stunTimer <= 0) {
+          if (Math.abs(other.x - centerPx) <= 72 && Math.abs(other.y - centerPy) <= 72) {
+            other.stun(120);
+            this.particles.addItemGetParticles(other.x, other.y, '#2dd4bf');
+            this.particles.addExplosionParticles(other.x, other.y, 5);
+            if (other.config.id === 0) {
+              this.input.vibrate(0, 220, 0.7, 0.35);
+            }
+          }
+        }
+      }
+
+      if (zone.remainingFrames <= 0) {
+        this.activeTempestZones.splice(i, 1);
+      }
+    }
   }
 
   /**
@@ -978,8 +1144,9 @@ export class GameManager {
       this.round
     );
 
-    // Overlay state messages
+    // Overlay state messages and active 3x3 tempest zones
     const ctx = this.canvas.getContext('2d')!;
+    this.drawTempestZones(ctx);
 
     if (this.state === 'COUNTDOWN') {
       const count = Math.ceil(this.countdownTimer / 60);
@@ -991,6 +1158,31 @@ export class GameManager {
       this.drawBigBanner(ctx, bannerText, bannerColor, 'Press (A) / [R] for Next Round');
     } else if (this.state === 'PAUSED') {
       this.drawBigBanner(ctx, 'PAUSED', '#38bdf8', 'Press Start / [P] to Resume');
+    }
+  }
+
+  private drawTempestZones(ctx: CanvasRenderingContext2D) {
+    if (this.activeTempestZones.length === 0) return;
+    const now = Date.now();
+    for (const zone of this.activeTempestZones) {
+      const left = (zone.centerTx - 1) * 48;
+      const top = (zone.centerTy - 1) * 48;
+      const size = 3 * 48;
+      const fade = Math.min(1, zone.remainingFrames / 30);
+      const pulse = 0.65 + 0.35 * Math.sin(now / 120);
+
+      ctx.save();
+      ctx.globalAlpha = 0.22 * fade * pulse;
+      ctx.fillStyle = '#2dd4bf';
+      ctx.fillRect(left, top, size, size);
+
+      ctx.globalAlpha = 0.8 * fade;
+      ctx.strokeStyle = '#99f6e4';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([8, 6]);
+      ctx.lineDashOffset = -(now / 30) % 14;
+      ctx.strokeRect(left + 1, top + 1, size - 2, size - 2);
+      ctx.restore();
     }
   }
 
