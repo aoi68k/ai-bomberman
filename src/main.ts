@@ -20,79 +20,137 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // UI Elements
   const timerBadge = document.getElementById('timerBadge') as HTMLElement;
+  const btnTitle = document.getElementById('btnTitle') as HTMLButtonElement;
+  const btnSetup = document.getElementById('btnSetup') as HTMLButtonElement;
   const btnBgm = document.getElementById('btnBgm') as HTMLButtonElement;
   const btnSfx = document.getElementById('btnSfx') as HTMLButtonElement;
   const btnReset = document.getElementById('btnReset') as HTMLButtonElement;
   const btnFullscreen = document.getElementById('btnFullscreen') as HTMLButtonElement;
   const btnPopup = document.getElementById('btnPopup') as HTMLButtonElement;
-  const selComCount = document.getElementById('selComCount') as HTMLSelectElement;
   const gamepadStatus = document.getElementById('gamepadStatus') as HTMLElement;
   const gamepadIndicator = document.getElementById('gamepadIndicator') as HTMLElement;
-  const btnCharSelect = document.getElementById('btnCharSelect') as HTMLButtonElement;
-  const charModal = document.getElementById('charModal') as HTMLElement;
-  const btnCloseModal = document.getElementById('btnCloseModal') as HTMLButtonElement;
-  const charGrid = document.getElementById('charGrid') as HTMLElement;
 
-  // Character Select Modal Setup
-  const openModal = () => {
-    charModal.classList.remove('hidden');
-    renderCharGrid();
-  };
+  const titleScreen = document.getElementById('titleScreen') as HTMLElement;
+  const setupScreen = document.getElementById('setupScreen') as HTMLElement;
+  const setupGrid = document.getElementById('setupGrid') as HTMLElement;
+  const setupValidationMsg = document.getElementById('setupValidationMsg') as HTMLElement;
+  const btnStartSetup = document.getElementById('btnStartSetup') as HTMLButtonElement;
+  const btnBackToTitle = document.getElementById('btnBackToTitle') as HTMLButtonElement;
+  const btnBattleStart = document.getElementById('btnBattleStart') as HTMLButtonElement;
 
-  const closeModal = () => {
-    charModal.classList.add('hidden');
-  };
+  const charList = Object.values(CHARACTERS);
+  const draftSlots = game.playerSlots.map((s) => ({ ...s }));
 
-  btnCharSelect.addEventListener('click', openModal);
-  btnCloseModal.addEventListener('click', closeModal);
-  charModal.addEventListener('click', (e) => {
-    if (e.target === charModal) closeModal();
-  });
+  const renderSetupGrid = () => {
+    setupGrid.innerHTML = '';
+    const activeCount = draftSlots.filter((s) => s.control !== 'OFF').length;
+    if (activeCount < 2) {
+      setupValidationMsg.textContent = '2人以上参加させてください';
+      btnBattleStart.disabled = true;
+    } else {
+      setupValidationMsg.textContent = '';
+      btnBattleStart.disabled = false;
+    }
 
-  const renderCharGrid = () => {
-    charGrid.innerHTML = '';
-    const charList = Object.values(CHARACTERS).map((c) => ({
-      id: c.charId,
-      folder: c.folder || c.charId,
-      name: c.jpName,
-      role: c.role,
-      skill: c.skillName,
-      desc: c.skillDesc,
-      ultra: c.ultraName,
-      ultraDesc: c.ultraDesc,
-    }));
+    draftSlots.forEach((slot, idx) => {
+      const charIdx = Math.max(
+        0,
+        charList.findIndex((c) => c.charId === slot.charId)
+      );
+      const charInfo = charList[charIdx] || charList[0];
 
-    charList.forEach((c) => {
-      const isSelected = game.selectedCharId === c.id;
-      const card = document.createElement('div');
-      card.className = `char-card ${isSelected ? 'selected' : ''}`;
+      const portraitImg = assets.getImage(`portrait_${charInfo.charId}` as any);
+      const portraitSrc = portraitImg
+        ? portraitImg.src
+        : `assets/images/characters/${charInfo.folder || charInfo.charId}/idle.png`;
 
-      const portraitImg = assets.getImage(`portrait_${c.id}` as any);
-      const portraitSrc = portraitImg ? portraitImg.src : `assets/images/characters/${c.folder}/idle.png`;
+      const slotEl = document.createElement('div');
+      slotEl.className = `setup-slot ${slot.control === 'OFF' ? 'is-off' : ''}`;
+      slotEl.style.borderColor = slot.control === 'OFF' ? '#334155' : charInfo.accentColor;
 
-      card.innerHTML = `
-        <img src="${portraitSrc}" alt="${c.name}" class="char-portrait" />
-        <div class="char-info">
-          <div class="char-name-row">
-            <span class="char-name">${c.name}</span>
-            <span class="char-role">${c.role}</span>
+      slotEl.innerHTML = `
+        <div class="setup-slot-top">
+          <span class="setup-slot-label">PLAYER ${idx + 1}</span>
+          <div class="control-toggle-group">
+            <button type="button" class="ctrl-btn ${slot.control === '1P' ? 'active-1p' : ''}" data-ctrl="1P">1P</button>
+            <button type="button" class="ctrl-btn ${slot.control === 'COM' ? 'active-com' : ''}" data-ctrl="COM">COM</button>
+            <button type="button" class="ctrl-btn ${slot.control === 'OFF' ? 'active-off' : ''}" data-ctrl="OFF">OFF</button>
           </div>
-          <div class="char-skill-name">${c.skill}</div>
-          <div class="char-skill-desc">${c.desc}</div>
-          <div class="char-skill-name" style="color: #38bdf8; margin-top: 2px;">${c.ultra}</div>
-          <div class="char-skill-desc">${c.ultraDesc}</div>
+        </div>
+        <div class="setup-char-row">
+          <img src="${portraitSrc}" alt="${charInfo.jpName}" class="setup-portrait" />
+          <div class="setup-char-details">
+            <div class="setup-char-selector">
+              <button type="button" class="char-nav-btn" data-dir="-1">◀</button>
+              <span class="setup-char-name">${charInfo.jpName}</span>
+              <button type="button" class="char-nav-btn" data-dir="1">▶</button>
+            </div>
+            <div class="setup-skill-mini">${charInfo.skillName}</div>
+            <div class="setup-skill-mini" style="color: #38bdf8;">${charInfo.ultraName}</div>
+          </div>
         </div>
       `;
 
-      card.addEventListener('click', () => {
-        game.selectCharacter(c.id);
-        game.startRound();
-        closeModal();
+      slotEl.querySelectorAll<HTMLButtonElement>('.ctrl-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const nextCtrl = btn.dataset.ctrl as '1P' | 'COM' | 'OFF';
+          if (nextCtrl === '1P') {
+            draftSlots.forEach((other, oIdx) => {
+              if (oIdx !== idx && other.control === '1P') {
+                other.control = 'COM';
+              }
+            });
+          }
+          slot.control = nextCtrl;
+          renderSetupGrid();
+        });
       });
 
-      charGrid.appendChild(card);
+      slotEl.querySelectorAll<HTMLButtonElement>('.char-nav-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const dir = parseInt(btn.dataset.dir || '1', 10);
+          const nextIdx = (charIdx + dir + charList.length) % charList.length;
+          slot.charId = charList[nextIdx].charId;
+          renderSetupGrid();
+        });
+      });
+
+      setupGrid.appendChild(slotEl);
     });
   };
+
+  const showTitleScreen = () => {
+    titleScreen.classList.remove('hidden');
+    setupScreen.classList.add('hidden');
+    game.showTitle();
+  };
+
+  const showSetupScreen = () => {
+    titleScreen.classList.add('hidden');
+    setupScreen.classList.remove('hidden');
+    game.showSetup();
+    renderSetupGrid();
+  };
+
+  const startBattleFromSetup = () => {
+    titleScreen.classList.add('hidden');
+    setupScreen.classList.add('hidden');
+    game.setPlayerSlots(draftSlots);
+    game.startGame();
+  };
+
+  btnStartSetup.addEventListener('click', showSetupScreen);
+  btnBackToTitle.addEventListener('click', showTitleScreen);
+  btnBattleStart.addEventListener('click', startBattleFromSetup);
+  btnTitle.addEventListener('click', showTitleScreen);
+  btnSetup.addEventListener('click', showSetupScreen);
+
+  window.addEventListener('keydown', (e) => {
+    if (game.state === 'TITLE' && (e.code === 'Enter' || e.code === 'Space')) {
+      e.preventDefault();
+      showSetupScreen();
+    }
+  });
 
   // Render player cards
   const updatePlayerCards = (stats: GameStats) => {
@@ -178,13 +236,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   btnReset.addEventListener('click', () => {
-    game.startRound();
-  });
-
-  selComCount.addEventListener('change', (e) => {
-    const target = e.target as HTMLSelectElement;
-    game.setComCount(parseInt(target.value, 10));
-    game.startRound();
+    if (game.state === 'TITLE' || game.state === 'SETUP') {
+      startBattleFromSetup();
+    } else {
+      game.startRound();
+    }
   });
 
   // Fullscreen toggle
@@ -255,7 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindTouch('btnSkillTouch', 'KeyE');
   bindTouch('btnUltraTouch', 'KeyQ');
 
-  // Start the game loop & match
-  game.startGame();
+  // Start on Title Screen -> Player Setup -> Battle
+  showTitleScreen();
   game.startLoop();
 });

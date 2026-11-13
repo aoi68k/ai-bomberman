@@ -16,7 +16,13 @@ import { ParticleManager } from './particles';
 import { GameRenderer } from './renderer';
 import { sounds } from './audio';
 
-export type GameState = 'START_SCREEN' | 'COUNTDOWN' | 'PLAYING' | 'ROUND_OVER' | 'PAUSED';
+export type GameState = 'TITLE' | 'SETUP' | 'COUNTDOWN' | 'PLAYING' | 'ROUND_OVER' | 'PAUSED';
+
+export interface PlayerSlotConfig {
+  slotIndex: number; // 0..3
+  control: '1P' | 'COM' | 'OFF';
+  charId: string;
+}
 
 export interface GameStats {
   round: number;
@@ -38,9 +44,10 @@ export class GameManager {
   public players: Player[] = [];
   public aiControllers: AIController[] = [];
 
-  public state: GameState = 'START_SCREEN';
+  public state: GameState = 'TITLE';
   public selectedCharId: string = 'bomber_blue';
-  public comCount: number = 3; // Default: 1 Human vs 3 COM = 4 Players
+  public comCount: number = 3;
+  public playerSlots: PlayerSlotConfig[] = [];
   public round: number = 1;
   public roundTimeSeconds: number = 120; // 2 minutes
   public frameCount: number = 0;
@@ -91,6 +98,14 @@ export class GameManager {
     this.bombManager = new BombManager();
     this.particles = new ParticleManager();
 
+    const charKeys = Object.keys(CHARACTERS);
+    const fallbackId = charKeys[0] || 'bomber_blue';
+    this.playerSlots = [0, 1, 2, 3].map((idx) => ({
+      slotIndex: idx,
+      control: idx === 0 ? '1P' : 'COM',
+      charId: charKeys[idx % Math.max(1, charKeys.length)] || fallbackId,
+    }));
+
     this.setupPlayers();
   }
 
@@ -98,58 +113,63 @@ export class GameManager {
     this.players = [];
     this.aiControllers = [];
 
-    // Player 1 configuration based on selected character
-    const charData = CHARACTERS[this.selectedCharId] || Object.values(CHARACTERS)[0];
-    const p1Config: PlayerConfig = {
-      ...PLAYER_CONFIGS[0],
-      charId: charData.charId,
-      name: charData.name,
-      color: charData.color,
-      subColor: charData.subColor,
-      accentColor: charData.accentColor,
-      stats: charData.stats,
-      skillType: charData.skillType,
-      skillCooldown: charData.skillCooldown,
-      ultraType: charData.ultraType,
-      ultraCooldown: charData.ultraCooldown,
-    };
+    const fallbackChar = Object.values(CHARACTERS)[0];
 
-    const p1 = new Player(p1Config);
-    this.players.push(p1);
+    for (const slot of this.playerSlots) {
+      if (slot.control === 'OFF') continue;
 
-    // Other characters for COMs
-    const allCharKeys = Object.keys(CHARACTERS);
-    const availableComKeys = allCharKeys.filter((k) => k !== this.selectedCharId);
+      const charData = CHARACTERS[slot.charId] || fallbackChar;
+      const baseConfig = PLAYER_CONFIGS[slot.slotIndex];
+      const isHuman = slot.control === '1P';
 
-    // Create requested number of COM opponents (up to 3)
-    for (let i = 1; i <= this.comCount; i++) {
-      const comCharKey = availableComKeys[(i - 1) % availableComKeys.length];
-      const comCharData = CHARACTERS[comCharKey];
-      const baseConfig = PLAYER_CONFIGS[i];
-
-      const comConfig: PlayerConfig = {
+      const config: PlayerConfig = {
         ...baseConfig,
-        charId: comCharData.charId,
-        name: `COM ${i} (${comCharData.jpName})`,
-        color: comCharData.color,
-        subColor: comCharData.subColor,
-        accentColor: comCharData.accentColor,
-        stats: comCharData.stats,
-        skillType: comCharData.skillType,
-        skillCooldown: comCharData.skillCooldown,
-        ultraType: comCharData.ultraType,
-        ultraCooldown: comCharData.ultraCooldown,
+        id: slot.slotIndex,
+        isHuman,
+        charId: charData.charId,
+        name: isHuman ? `1P (${charData.jpName})` : `COM ${slot.slotIndex + 1} (${charData.jpName})`,
+        color: charData.color,
+        subColor: charData.subColor,
+        accentColor: charData.accentColor,
+        stats: charData.stats,
+        skillType: charData.skillType,
+        skillCooldown: charData.skillCooldown,
+        ultraType: charData.ultraType,
+        ultraCooldown: charData.ultraCooldown,
       };
 
-      const com = new Player(comConfig);
-      this.players.push(com);
-      this.aiControllers.push(new AIController(com));
+      const player = new Player(config);
+      this.players.push(player);
+      if (!isHuman) {
+        this.aiControllers.push(new AIController(player));
+      }
     }
+
+    this.comCount = this.players.filter((p) => !p.config.isHuman).length;
+  }
+
+  public setPlayerSlots(slots: PlayerSlotConfig[]) {
+    this.playerSlots = slots.map((s) => ({ ...s }));
+    this.setupPlayers();
+    this.broadcastStats();
+  }
+
+  public showTitle() {
+    this.state = 'TITLE';
+    this.broadcastStats();
+  }
+
+  public showSetup() {
+    this.state = 'SETUP';
+    this.broadcastStats();
   }
 
   public selectCharacter(charId: string) {
     if (CHARACTERS[charId]) {
       this.selectedCharId = charId;
+      if (this.playerSlots[0]) {
+        this.playerSlots[0].charId = charId;
+      }
       this.setupPlayers();
       this.broadcastStats();
     }
@@ -157,6 +177,11 @@ export class GameManager {
 
   public setComCount(count: number) {
     this.comCount = Math.max(1, Math.min(3, count));
+    for (let i = 1; i <= 3; i++) {
+      if (this.playerSlots[i]) {
+        this.playerSlots[i].control = i <= this.comCount ? 'COM' : 'OFF';
+      }
+    }
     this.setupPlayers();
     this.broadcastStats();
   }
@@ -299,8 +324,8 @@ export class GameManager {
       return;
     }
 
-    // STATE: PAUSED or START_SCREEN
-    if (this.state === 'PAUSED' || this.state === 'START_SCREEN') {
+    // STATE: PAUSED, TITLE, or SETUP
+    if (this.state === 'PAUSED' || this.state === 'TITLE' || this.state === 'SETUP') {
       this.input.endFrame();
       return;
     }
@@ -349,8 +374,8 @@ export class GameManager {
     this.updateWindSlashes();
     this.updateTempestZones();
 
-    // 1. Human (P1) input, movement, skill, and ultra
-    const p1 = this.players[0];
+    // 1. Human (1P) input, movement, skill, and ultra
+    const p1 = this.players.find((p) => p.config.isHuman);
     if (p1 && p1.isAlive) {
       if (!p1.isTackling && p1.slashSequenceTimer <= 0) {
         p1.move(p1Input.dx, p1Input.dy, this.map, this.bombManager, (kickedBomb) => {
@@ -402,10 +427,10 @@ export class GameManager {
         this.particles.triggerShake(5, 12);
         this.particles.addExplosionParticles(explodedBomb.pixelX, explodedBomb.pixelY, 18);
 
-        // Vibrate gamepad if Human (P1) is near explosion or owns bomb
-        if (p1.isAlive) {
+        // Vibrate gamepad if Human (1P) is near explosion or owns bomb
+        if (p1 && p1.isAlive) {
           const distToP1 = Math.hypot(p1.x - explodedBomb.pixelX, p1.y - explodedBomb.pixelY);
-          if (distToP1 < 160 || explodedBomb.ownerId === 0) {
+          if (distToP1 < 160 || explodedBomb.ownerId === p1.config.id) {
             this.input.vibrate(0, 240, 0.7, 0.4);
           }
         }

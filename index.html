@@ -18,12 +18,8 @@
         <div id="timerBadge" class="timer-badge">2:00</div>
 
         <div class="top-actions">
-          <button id="btnCharSelect" class="action-btn highlight-btn" title="Choose your character">👤 キャラ選択</button>
-          <select id="selComCount" class="action-btn" title="COM Opponents count">
-            <option value="1">1 vs 1 COM</option>
-            <option value="2">1 vs 2 COM</option>
-            <option value="3" selected>1 vs 3 COM (4P)</option>
-          </select>
+          <button id="btnTitle" class="action-btn" title="タイトル画面へ戻る">🏠 タイトル</button>
+          <button id="btnSetup" class="action-btn highlight-btn" title="プレイヤーセットアップ画面へ">👥 対戦設定</button>
           <button id="btnBgm" class="action-btn">🎵 BGM: OFF</button>
           <button id="btnSfx" class="action-btn">🔇 SE: OFF</button>
           <button id="btnReset" class="action-btn">🔄 Retry</button>
@@ -31,19 +27,6 @@
           <button id="btnPopup" class="action-btn" title="ポップアップウィンドウで開く">🪟 別窓</button>
         </div>
       </header>
-
-      <!-- Character Selection Modal -->
-      <div id="charModal" class="modal-overlay hidden">
-        <div class="modal-card">
-          <div class="modal-header">
-            <h2>⚔️ キャラクター選択 (Choose Your Bomber)</h2>
-            <button id="btnCloseModal" class="modal-close">&times;</button>
-          </div>
-          <div id="charGrid" class="char-select-grid">
-            <!-- Dynamically populated -->
-          </div>
-        </div>
-      </div>
 
       <!-- Gamepad Connection Indicator -->
       <div class="gamepad-bar">
@@ -59,6 +42,35 @@
       <!-- Main Game Arena Canvas -->
       <div class="canvas-wrapper">
         <canvas id="gameCanvas" width="720" height="624"></canvas>
+
+        <!-- 1. Game Title Screen -->
+        <div id="titleScreen" class="screen-overlay">
+          <div class="title-box">
+            <div class="title-badge">ARCADE BATTLE ROYALE</div>
+            <div class="title-logo-big">💣 AI BOMBER 🔥</div>
+            <p class="title-sub">必殺技＆超技ゲージで戦うレトロアーケードバトル！</p>
+            <button id="btnStartSetup" class="primary-start-btn">▶ GAME START</button>
+            <div class="title-hint">Press [Enter] / [Space] or Gamepad (A) to Start</div>
+          </div>
+        </div>
+
+        <!-- 2. Player Setup Screen -->
+        <div id="setupScreen" class="screen-overlay hidden">
+          <div class="setup-box">
+            <div class="setup-header">
+              <h2>⚔️ プレイヤーセットアップ (Player Setup)</h2>
+              <span class="setup-sub">各プレイヤーの操作 (1P / COM) とキャラクターを選択</span>
+            </div>
+            <div id="setupGrid" class="setup-grid">
+              <!-- Dynamically populated 4 slots -->
+            </div>
+            <div class="setup-footer">
+              <button id="btnBackToTitle" class="action-btn">← タイトルへ</button>
+              <div id="setupValidationMsg" class="setup-validation"></div>
+              <button id="btnBattleStart" class="primary-start-btn">⚔️ BATTLE START!</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- HUD: 4 Players Status Cards -->
