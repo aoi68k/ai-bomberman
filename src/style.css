@@ -714,6 +714,15 @@ body.popup-mode .canvas-wrapper {
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
 }
 
+.title-logo-img {
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 14px rgba(250, 204, 21, 0.22));
+  margin: 4px 0;
+}
+
 .title-logo-big {
   font-size: 2.6rem;
   font-weight: 900;
