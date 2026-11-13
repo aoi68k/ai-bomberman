@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const pauseBtnSfx = document.getElementById('pauseBtnSfx') as HTMLButtonElement;
   const pauseBtnVibration = document.getElementById('pauseBtnVibration') as HTMLButtonElement;
   const pauseBtnFullscreen = document.getElementById('pauseBtnFullscreen') as HTMLButtonElement;
+  const setupRoster = document.getElementById('setupRoster') as HTMLElement;
   const setupGrid = document.getElementById('setupGrid') as HTMLElement;
   const setupValidationMsg = document.getElementById('setupValidationMsg') as HTMLElement;
   const btnStartSetup = document.getElementById('btnStartSetup') as HTMLButtonElement;
@@ -48,7 +49,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const charList = Object.values(CHARACTERS);
   const draftSlots = game.playerSlots.map((s) => ({ ...s }));
-  let setupFocus = 0; // 0..3: player slots, 4: back to title, 5: battle start
+  const slotColors = ['#f43f5e', '#38bdf8', '#facc15', '#10b981'];
+  let activeSlotIdx = 0; // 0..3: slot currently receiving character selection
+  let setupArea: 'roster' | 'footer' = 'roster';
+  let rosterFocus = 0; // 0..charList.length-1
+  let footerFocus = 1; // 0: back, 1: battle start
   let pauseFocus = 0; // 0..7: pause menu buttons
   let showPadFocus = false;
 
@@ -63,18 +68,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     draftSlots[idx].control = nextCtrl;
   };
 
-  const stepSlotChar = (idx: number, dir: number) => {
-    const slot = draftSlots[idx];
-    const charIdx = Math.max(
-      0,
-      charList.findIndex((c) => c.charId === slot.charId)
-    );
-    const nextIdx = (charIdx + dir + charList.length) % charList.length;
-    slot.charId = charList[nextIdx].charId;
-  };
-
   const renderSetupGrid = () => {
+    setupRoster.innerHTML = '';
     setupGrid.innerHTML = '';
+
     const activeCount = draftSlots.filter((s) => s.control !== 'OFF').length;
     if (activeCount < 2) {
       setupValidationMsg.textContent = '2人以上参加させてください';
@@ -84,9 +81,49 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnBattleStart.disabled = false;
     }
 
-    btnBackToTitle.classList.toggle('pad-focused', showPadFocus && setupFocus === 4);
-    btnBattleStart.classList.toggle('pad-focused', showPadFocus && setupFocus === 5);
+    btnBackToTitle.classList.toggle('pad-focused', showPadFocus && setupArea === 'footer' && footerFocus === 0);
+    btnBattleStart.classList.toggle('pad-focused', showPadFocus && setupArea === 'footer' && footerFocus === 1);
 
+    const activeCharId = draftSlots[activeSlotIdx]?.charId;
+
+    // 1. Render 2-row character icon roster at top
+    charList.forEach((charInfo, cIdx) => {
+      const portraitImg = assets.getImage(`portrait_${charInfo.charId}` as any);
+      const portraitSrc = portraitImg
+        ? portraitImg.src
+        : `assets/images/characters/${charInfo.folder || charInfo.charId}/idle.png`;
+
+      const selectedBySlots = draftSlots
+        .map((s, sIdx) => (s.control !== 'OFF' && s.charId === charInfo.charId ? sIdx : -1))
+        .filter((sIdx) => sIdx >= 0);
+
+      const item = document.createElement('div');
+      const isSelectedByActive = charInfo.charId === activeCharId;
+      const isPadFocused = showPadFocus && setupArea === 'roster' && rosterFocus === cIdx;
+      item.className = `roster-item ${isSelectedByActive ? 'is-selected-by-active' : ''} ${isPadFocused ? 'pad-focused' : ''}`;
+      item.title = `${charInfo.jpName} — ${charInfo.skillName} / ${charInfo.ultraName}`;
+
+      const badgesHtml = selectedBySlots
+        .map((sIdx) => `<span class="roster-badge" style="background:${slotColors[sIdx]}">P${sIdx + 1}</span>`)
+        .join('');
+
+      item.innerHTML = `
+        <div class="roster-badges">${badgesHtml}</div>
+        <img src="${portraitSrc}" alt="${charInfo.jpName}" class="roster-icon" />
+        <span class="roster-name">${charInfo.jpName}</span>
+      `;
+
+      item.addEventListener('click', () => {
+        showPadFocus = false;
+        rosterFocus = cIdx;
+        draftSlots[activeSlotIdx].charId = charInfo.charId;
+        renderSetupGrid();
+      });
+
+      setupRoster.appendChild(item);
+    });
+
+    // 2. Render 4 player slots below
     draftSlots.forEach((slot, idx) => {
       const charIdx = Math.max(
         0,
@@ -100,13 +137,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         : `assets/images/characters/${charInfo.folder || charInfo.charId}/idle.png`;
 
       const slotEl = document.createElement('div');
-      const isFocused = showPadFocus && setupFocus === idx;
-      slotEl.className = `setup-slot ${slot.control === 'OFF' ? 'is-off' : ''} ${isFocused ? 'pad-focused' : ''}`;
+      const isEditing = idx === activeSlotIdx;
+      slotEl.className = `setup-slot ${slot.control === 'OFF' ? 'is-off' : ''} ${isEditing ? 'is-editing' : ''}`;
       slotEl.style.borderColor = slot.control === 'OFF' ? '#334155' : charInfo.accentColor;
 
       slotEl.innerHTML = `
         <div class="setup-slot-top">
-          <span class="setup-slot-label">PLAYER ${idx + 1}</span>
+          <span class="setup-slot-label">
+            PLAYER ${idx + 1}
+            ${isEditing ? '<span class="editing-tag">選択中</span>' : ''}
+          </span>
           <div class="control-toggle-group">
             <button type="button" class="ctrl-btn ${slot.control === '1P' ? 'active-1p' : ''}" data-ctrl="1P">1P</button>
             <button type="button" class="ctrl-btn ${slot.control === 'COM' ? 'active-com' : ''}" data-ctrl="COM">COM</button>
@@ -114,32 +154,27 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
         <div class="setup-char-row">
-          <img src="${portraitSrc}" alt="${charInfo.jpName}" class="setup-portrait" />
+          <img src="${portraitSrc}" alt="${charInfo.jpName}" class="setup-portrait" style="border-color: ${charInfo.accentColor}" />
           <div class="setup-char-details">
-            <div class="setup-char-selector">
-              <button type="button" class="char-nav-btn" data-dir="-1">◀</button>
-              <span class="setup-char-name">${charInfo.jpName}</span>
-              <button type="button" class="char-nav-btn" data-dir="1">▶</button>
-            </div>
+            <div class="setup-char-name">${charInfo.jpName}</div>
             <div class="setup-skill-mini">${charInfo.skillName}</div>
             <div class="setup-skill-mini" style="color: #38bdf8;">${charInfo.ultraName}</div>
           </div>
         </div>
       `;
 
-      slotEl.querySelectorAll<HTMLButtonElement>('.ctrl-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          showPadFocus = false;
-          setSlotControl(idx, btn.dataset.ctrl as '1P' | 'COM' | 'OFF');
-          renderSetupGrid();
-        });
+      slotEl.addEventListener('click', () => {
+        showPadFocus = false;
+        activeSlotIdx = idx;
+        renderSetupGrid();
       });
 
-      slotEl.querySelectorAll<HTMLButtonElement>('.char-nav-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
+      slotEl.querySelectorAll<HTMLButtonElement>('.ctrl-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
           showPadFocus = false;
-          const dir = parseInt(btn.dataset.dir || '1', 10);
-          stepSlotChar(idx, dir);
+          activeSlotIdx = idx;
+          setSlotControl(idx, btn.dataset.ctrl as '1P' | 'COM' | 'OFF');
           renderSetupGrid();
         });
       });
@@ -157,7 +192,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const showSetupScreen = () => {
     titleScreen.classList.add('hidden');
     setupScreen.classList.remove('hidden');
-    setupFocus = 0;
+    activeSlotIdx = 0;
+    setupArea = 'roster';
+    rosterFocus = Math.max(
+      0,
+      charList.findIndex((c) => c.charId === draftSlots[0]?.charId)
+    );
     showPadFocus = game.input.getConnectedGamepads().some((p) => p.connected);
     game.showSetup();
     renderSetupGrid();
@@ -261,38 +301,60 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
-      // 2x2 grid (0..3) + footer buttons (4: Back, 5: Battle Start)
-      if (input.dx !== 0) {
-        if (setupFocus % 2 === 0 && input.dx > 0) setupFocus += 1;
-        else if (setupFocus % 2 === 1 && input.dx < 0) setupFocus -= 1;
-      }
-      if (input.dy !== 0) {
-        const nextFocus = setupFocus + input.dy * 2;
-        if (nextFocus >= 0 && nextFocus <= 5) {
-          setupFocus = nextFocus;
-        }
+      // LB / RB switches which player slot (P1..P4) is being edited
+      if (input.prevChar) {
+        activeSlotIdx = (activeSlotIdx + 3) % 4;
+      } else if (input.nextChar) {
+        activeSlotIdx = (activeSlotIdx + 1) % 4;
       }
 
-      if (setupFocus >= 0 && setupFocus <= 3) {
-        if (input.confirm || input.nextChar) {
-          stepSlotChar(setupFocus, 1);
-        } else if (input.prevChar) {
-          stepSlotChar(setupFocus, -1);
-        } else if (input.alt) {
-          const order: Array<'1P' | 'COM' | 'OFF'> = ['1P', 'COM', 'OFF'];
-          const cur = draftSlots[setupFocus].control;
-          const next = order[(order.indexOf(cur) + 1) % order.length];
-          setSlotControl(setupFocus, next);
+      // X toggles 1P / COM / OFF for active slot
+      if (input.alt) {
+        const order: Array<'1P' | 'COM' | 'OFF'> = ['1P', 'COM', 'OFF'];
+        const cur = draftSlots[activeSlotIdx].control;
+        const next = order[(order.indexOf(cur) + 1) % order.length];
+        setSlotControl(activeSlotIdx, next);
+      }
+
+      if (setupArea === 'roster') {
+        if (input.dx !== 0) {
+          const next = rosterFocus + input.dx * 2;
+          if (next >= 0 && next < charList.length) {
+            rosterFocus = next;
+          }
         }
-      } else if (setupFocus === 4) {
+        if (input.dy > 0) {
+          if (rosterFocus % 2 === 0 && rosterFocus + 1 < charList.length) {
+            rosterFocus += 1;
+          } else {
+            setupArea = 'footer';
+            footerFocus = 1;
+          }
+        } else if (input.dy < 0) {
+          if (rosterFocus % 2 === 1) {
+            rosterFocus -= 1;
+          }
+        }
+
+        if (input.confirm && charList[rosterFocus]) {
+          draftSlots[activeSlotIdx].charId = charList[rosterFocus].charId;
+        }
+      } else {
+        // footer area
+        if (input.dx !== 0) {
+          footerFocus = input.dx > 0 ? 1 : 0;
+        }
+        if (input.dy < 0) {
+          setupArea = 'roster';
+        }
         if (input.confirm) {
-          showTitleScreen();
-          return;
-        }
-      } else if (setupFocus === 5) {
-        if (input.confirm && !btnBattleStart.disabled) {
-          startBattleFromSetup();
-          return;
+          if (footerFocus === 0) {
+            showTitleScreen();
+            return;
+          } else if (footerFocus === 1 && !btnBattleStart.disabled) {
+            startBattleFromSetup();
+            return;
+          }
         }
       }
 

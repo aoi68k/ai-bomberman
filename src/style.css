@@ -835,28 +835,119 @@ body.popup-mode .canvas-wrapper {
   color: #94a3b8;
 }
 
+/* 2-Row Character Roster */
+.setup-roster {
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.roster-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 4px 4px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.72) 0%, rgba(15, 23, 42, 0.92) 100%);
+  border: 1.5px solid rgba(148, 163, 184, 0.22);
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  min-width: 0;
+}
+
+.roster-item:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+}
+
+.roster-item.is-selected-by-active {
+  border-color: var(--accent-gold);
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.16) 0%, rgba(15, 23, 42, 0.95) 100%);
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.35);
+}
+
+.roster-item.pad-focused {
+  box-shadow: 0 0 0 2px #38bdf8, 0 0 16px rgba(56, 189, 248, 0.75);
+  border-color: #38bdf8;
+  transform: translateY(-2px) scale(1.03);
+}
+
+.roster-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 45%, #1e293b 0%, #020617 90%);
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.roster-name {
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.roster-badges {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  gap: 2px;
+}
+
+.roster-badge {
+  font-size: 0.56rem;
+  font-weight: 900;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: #020617;
+  line-height: 1.1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* 4-Column Player Slots */
 .setup-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
 }
 
 @media (max-width: 560px) {
   .setup-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 .setup-slot {
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.65) 0%, rgba(15, 23, 42, 0.88) 100%);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.65) 0%, rgba(15, 23, 42, 0.9) 100%);
   border: 1.5px solid #334155;
-  border-radius: 14px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  cursor: pointer;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   transition: opacity 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  min-width: 0;
+}
+
+.setup-slot.is-editing {
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.85), 0 0 18px rgba(250, 204, 21, 0.3);
+  background: linear-gradient(180deg, rgba(51, 65, 85, 0.65) 0%, rgba(15, 23, 42, 0.96) 100%);
 }
 
 .setup-slot.is-off {
@@ -866,36 +957,51 @@ body.popup-mode .canvas-wrapper {
 
 .setup-slot-top {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .setup-slot-label {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editing-tag {
+  font-size: 0.58rem;
+  font-weight: 900;
+  background: var(--accent-gold);
+  color: #020617;
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 .control-toggle-group {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   background: rgba(2, 6, 23, 0.65);
   padding: 2px;
-  border-radius: 8px;
+  border-radius: 7px;
   border: 1px solid rgba(148, 163, 184, 0.15);
+  width: 100%;
+  justify-content: center;
 }
 
 .ctrl-btn {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 5px;
   cursor: pointer;
+  flex: 1;
   transition: all 0.14s ease;
 }
 
@@ -925,14 +1031,15 @@ body.popup-mode .canvas-wrapper {
 
 .setup-char-row {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 5px;
 }
 
 .setup-portrait {
-  width: 88px;
-  height: 88px;
-  border-radius: 12px;
+  width: 78px;
+  height: 78px;
+  border-radius: 10px;
   background: radial-gradient(circle at 50% 45%, #1e293b 0%, #020617 85%);
   border: 2px solid rgba(148, 163, 184, 0.35);
   image-rendering: auto;
@@ -942,58 +1049,33 @@ body.popup-mode .canvas-wrapper {
 }
 
 .setup-char-details {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-}
-
-.setup-char-selector {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  background: rgba(2, 6, 23, 0.45);
-  padding: 3px 4px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-}
-
-.char-nav-btn {
-  background: rgba(30, 41, 59, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  color: #f8fafc;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 800;
-  font-size: 0.76rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.14s ease;
-}
-
-.char-nav-btn:hover {
-  border-color: var(--accent-cyan);
-  background: #0284c7;
+  text-align: center;
+  gap: 2px;
 }
 
 .setup-char-name {
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   font-weight: 900;
   color: var(--accent-gold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .setup-skill-mini {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   color: #cbd5e1;
-  line-height: 1.25;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .setup-footer {
@@ -1001,7 +1083,7 @@ body.popup-mode .canvas-wrapper {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .setup-validation {
