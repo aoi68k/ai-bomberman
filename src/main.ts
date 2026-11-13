@@ -200,6 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindTouch('btnRight', 'ArrowRight');
   bindTouch('btnBombTouch', 'Space');
   bindTouch('btnSkillTouch', 'KeyE');
+  bindTouch('btnUltraTouch', 'KeyQ');
 
   // Start the game loop & match
   game.startGame();

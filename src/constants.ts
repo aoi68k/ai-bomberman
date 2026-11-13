@@ -52,7 +52,8 @@ export const PLAYER_HITBOX_RADIUS = 13.5; // Collision radius (lenient for smoot
 export const CORNERING_ASSIST_THRESHOLD = 24; // Half-tile distance to snap/slide around corners and crossroads
 
 // Character Skills
-export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY' | 'TACKLE';
+export type SkillType = 'DASH' | 'REMOTE_DETONATE' | 'MEGA_BOMB' | 'SHIELD_DEPLOY' | 'TACKLE' | 'CHEN_SLASH_RUSH';
+export type UltraType = 'ULTRA_BLITZ_DASH' | 'ULTRA_ALL_DETONATE' | 'ULTRA_NOVA_BOMB' | 'ULTRA_FORTRESS' | 'ULTRA_METEOR_TACKLE' | 'CHEN_TEMPEST_RUSH';
 
 export interface CharacterInfo {
   charId: string;
@@ -67,6 +68,10 @@ export interface CharacterInfo {
   skillName: string;
   skillDesc: string;
   skillCooldown: number; // in frames (60fps)
+  ultraType: UltraType;
+  ultraName: string;
+  ultraDesc: string;
+  ultraCooldown: number; // in frames (60fps)
 }
 
 export const CHARACTERS: Record<string, CharacterInfo> = {
@@ -83,6 +88,10 @@ export const CHARACTERS: Record<string, CharacterInfo> = {
     skillName: 'ダッシュ (Dash)',
     skillDesc: '向いている方向へ素早く2マス突進！爆風回避に',
     skillCooldown: 480, // 8 seconds
+    ultraType: 'ULTRA_BLITZ_DASH',
+    ultraName: '閃光ダッシュ (Blitz)',
+    ultraDesc: '前方3マスへ高速ワープ＆1秒間無敵！',
+    ultraCooldown: 1080, // 18 seconds
   },
   bomber_black: {
     charId: 'bomber_black',
@@ -97,6 +106,10 @@ export const CHARACTERS: Record<string, CharacterInfo> = {
     skillName: 'リモコン起爆 (Remote)',
     skillDesc: '直前に置いた自分のボムを好きなタイミングで遠隔爆破！',
     skillCooldown: 600, // 10 seconds
+    ultraType: 'ULTRA_ALL_DETONATE',
+    ultraName: '一斉起爆 (All Detonate)',
+    ultraDesc: '設置中の自分のボムすべてを即座に大爆発させる！',
+    ultraCooldown: 1200, // 20 seconds
   },
   bomber_red: {
     charId: 'bomber_red',
@@ -111,6 +124,10 @@ export const CHARACTERS: Record<string, CharacterInfo> = {
     skillName: 'メガボム (Mega Bomb)',
     skillDesc: '次回置くボムがブロック貫通の超特大メガボムになる！',
     skillCooldown: 720, // 12 seconds
+    ultraType: 'ULTRA_NOVA_BOMB',
+    ultraName: 'ノヴァボム (Nova Bomb)',
+    ultraDesc: '最大火力8の超特大ボムを足元に即時展開！',
+    ultraCooldown: 1200, // 20 seconds
   },
   bomber_green: {
     charId: 'bomber_green',
@@ -125,6 +142,10 @@ export const CHARACTERS: Record<string, CharacterInfo> = {
     skillName: '緊急シールド (Shield)',
     skillDesc: '3秒間、爆風を防ぐエネルギーシールドを1枚展開！',
     skillCooldown: 900, // 15 seconds
+    ultraType: 'ULTRA_FORTRESS',
+    ultraName: 'フォートレス (Fortress)',
+    ultraDesc: 'シールド2枚展開＆2秒間完全無敵状態になる！',
+    ultraCooldown: 1320, // 22 seconds
   },
   bomber_purple: {
     charId: 'bomber_purple',
@@ -139,6 +160,28 @@ export const CHARACTERS: Record<string, CharacterInfo> = {
     skillName: 'スタンタックル (Tackle)',
     skillDesc: '向いている方向へ2マス突進！当たった敵を3秒間スタンさせる',
     skillCooldown: 600, // 10 seconds
+    ultraType: 'ULTRA_METEOR_TACKLE',
+    ultraName: 'メテオタックル (Meteor)',
+    ultraDesc: '前方3マスへ猛突進！当たった敵を4秒間スタンさせる',
+    ultraCooldown: 1200, // 20 seconds
+  },
+  chen: {
+    charId: 'chen',
+    name: 'Chen',
+    jpName: 'チェン',
+    role: '龍剣士',
+    folder: 'characters/chen',
+    color: '#0284c7',
+    subColor: '#f8fafc',
+    accentColor: '#38bdf8',
+    skillType: 'CHEN_SLASH_RUSH',
+    skillName: '二連斬り突進 (Slash Rush)',
+    skillDesc: '前方0～1マスに2回斬撃ののち、0～2マス斬撃しながら突進（3秒スタン）',
+    skillCooldown: 600, // 10 seconds
+    ultraType: 'CHEN_TEMPEST_RUSH',
+    ultraName: '龍閃乱れ斬り (Tempest)',
+    ultraDesc: '斬撃乱れ斬をしながら前方4マス突進！斬撃を受けた敵を3秒スタン',
+    ultraCooldown: 1200, // 20 seconds
   },
 };
 
@@ -157,6 +200,8 @@ export interface PlayerConfig {
   personality: 'balanced' | 'aggressive' | 'collector' | 'cautious';
   skillType: SkillType;
   skillCooldown: number;
+  ultraType: UltraType;
+  ultraCooldown: number;
 }
 
 export const PLAYER_CONFIGS: PlayerConfig[] = [
@@ -174,6 +219,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     personality: 'balanced',
     skillType: 'DASH',
     skillCooldown: 480,
+    ultraType: 'ULTRA_BLITZ_DASH',
+    ultraCooldown: 1080,
   },
   {
     id: 1,
@@ -189,6 +236,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     personality: 'aggressive',
     skillType: 'REMOTE_DETONATE',
     skillCooldown: 600,
+    ultraType: 'ULTRA_ALL_DETONATE',
+    ultraCooldown: 1200,
   },
   {
     id: 2,
@@ -204,6 +253,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     personality: 'collector',
     skillType: 'MEGA_BOMB',
     skillCooldown: 720,
+    ultraType: 'ULTRA_NOVA_BOMB',
+    ultraCooldown: 1200,
   },
   {
     id: 3,
@@ -219,6 +270,8 @@ export const PLAYER_CONFIGS: PlayerConfig[] = [
     personality: 'cautious',
     skillType: 'SHIELD_DEPLOY',
     skillCooldown: 900,
+    ultraType: 'ULTRA_FORTRESS',
+    ultraCooldown: 1320,
   },
 ];
 

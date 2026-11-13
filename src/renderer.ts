@@ -490,13 +490,14 @@ export class GameRenderer {
       ctx.shadowBlur = 0;
     }
 
-    // Tackle Rush Aura if active
-    if (p.isAlive && p.isTackling) {
+    // Tackle / Slash Rush Aura if active
+    if (p.isAlive && (p.isTackling || p.slashSequenceTimer > 0)) {
+      const isSlash = p.tackleSlashMode !== 'none' || p.slashSequenceTimer > 0;
       ctx.save();
-      ctx.strokeStyle = '#c084fc';
-      ctx.lineWidth = 3;
-      ctx.shadowColor = '#a855f7';
-      ctx.shadowBlur = 12;
+      ctx.strokeStyle = isSlash ? '#38bdf8' : '#c084fc';
+      ctx.lineWidth = p.tackleSlashMode === 'ultra_tempest' ? 4 : 3;
+      ctx.shadowColor = isSlash ? '#0284c7' : '#a855f7';
+      ctx.shadowBlur = p.tackleSlashMode === 'ultra_tempest' ? 16 : 12;
       ctx.beginPath();
       ctx.arc(0, -2, 22, 0, Math.PI * 2);
       ctx.stroke();

@@ -89,6 +89,8 @@ export class GameManager {
       accentColor: charData.accentColor,
       skillType: charData.skillType,
       skillCooldown: charData.skillCooldown,
+      ultraType: charData.ultraType,
+      ultraCooldown: charData.ultraCooldown,
     };
 
     const p1 = new Player(p1Config);
@@ -113,6 +115,8 @@ export class GameManager {
         accentColor: comCharData.accentColor,
         skillType: comCharData.skillType,
         skillCooldown: comCharData.skillCooldown,
+        ultraType: comCharData.ultraType,
+        ultraCooldown: comCharData.ultraCooldown,
       };
 
       const com = new Player(comConfig);
@@ -307,17 +311,20 @@ export class GameManager {
       }
     }
 
-    // Update active tackles (e.g. Bomber Purple's skill)
+    // Update active tackles and slash sequences (Bomber Purple & Chen)
     for (const p of this.players) {
-      if (p.isAlive && p.isTackling) {
+      if (!p.isAlive) continue;
+      if (p.slashSequenceTimer > 0) {
+        this.updateChenSlashSequence(p);
+      } else if (p.isTackling) {
         this.updatePlayerTackle(p);
       }
     }
 
-    // 1. Human (P1) input, movement, and skill
+    // 1. Human (P1) input, movement, skill, and ultra
     const p1 = this.players[0];
     if (p1 && p1.isAlive) {
-      if (!p1.isTackling) {
+      if (!p1.isTackling && p1.slashSequenceTimer <= 0) {
         p1.move(p1Input.dx, p1Input.dy, this.map, this.bombManager, (kickedBomb) => {
           sounds.playKick();
         });
@@ -330,6 +337,10 @@ export class GameManager {
           if (this.tryUseSkill(p1) && p1.isTackling) {
             this.updatePlayerTackle(p1);
           }
+        } else if (p1Input.ultra) {
+          if (this.tryUseUltra(p1) && p1.isTackling) {
+            this.updatePlayerTackle(p1);
+          }
         }
       }
     }
@@ -338,6 +349,9 @@ export class GameManager {
     for (const p of this.players) {
       if (p.skillCooldownTimer > 0) {
         p.skillCooldownTimer--;
+      }
+      if (p.ultraCooldownTimer > 0) {
+        p.ultraCooldownTimer--;
       }
     }
 
@@ -436,7 +450,7 @@ export class GameManager {
   }
 
   private tryPlaceBomb(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling) return false;
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
     if (player.activeBombs >= player.maxBombs) return false;
 
     // Determine all players overlapping this tile right now
@@ -473,7 +487,7 @@ export class GameManager {
    * Executes unique character skill
    */
   public tryUseSkill(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling) return false;
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
     if (player.skillCooldownTimer > 0) return false;
 
     const skillType = player.config.skillType;
@@ -563,13 +577,213 @@ export class GameManager {
         if (player.config.id === 0) this.input.vibrate(0, 150, 0.5, 0.3);
         return true;
       }
+
+      case 'CHEN_SLASH_RUSH': {
+        // Phase 1: 2 slashes across 0..1 tiles forward, then Phase 2: rush forward up to 2 tiles while slashing
+        const dirs = {
+          up: { dx: 0, dy: -1 },
+          down: { dx: 0, dy: 1 },
+          left: { dx: -1, dy: 0 },
+          right: { dx: 1, dy: 0 },
+        };
+        const { dx, dy } = dirs[player.facing];
+        player.slashSequenceTimer = 18;
+        player.slashSeqDx = dx;
+        player.slashSeqDy = dy;
+        player.skillCooldownTimer = player.config.skillCooldown;
+
+        // 1st slash immediately (0..1 tiles forward)
+        this.performSlashHit(player, dx, dy, false);
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 100, 0.5, 0.25);
+        }
+        return true;
+      }
     }
 
     return false;
   }
 
   /**
-   * Updates continuous tackle charge movement and collision
+   * Executes Ultra Skill
+   */
+  public tryUseUltra(player: Player): boolean {
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
+    if (player.ultraCooldownTimer > 0) return false;
+
+    const ultraType = player.config.ultraType;
+    const dirs = {
+      up: { dx: 0, dy: -1 },
+      down: { dx: 0, dy: 1 },
+      left: { dx: -1, dy: 0 },
+      right: { dx: 1, dy: 0 },
+    };
+    const { dx, dy } = dirs[player.facing];
+
+    switch (ultraType) {
+      case 'CHEN_TEMPEST_RUSH': {
+        // Flurry of slashes while rushing forward 4 tiles (192px)
+        player.ultraCooldownTimer = player.config.ultraCooldown;
+        player.startTackle(dx, dy, 4 * 48, 6.0, false, 'ultra_tempest');
+        this.performSlashHit(player, dx, dy, false, true);
+        this.particles.triggerShake(5, 16);
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 260, 0.8, 0.5);
+        }
+        return true;
+      }
+
+      case 'ULTRA_BLITZ_DASH': {
+        const targetTx = Math.max(1, Math.min(13, player.tileX + dx * 3));
+        const targetTy = Math.max(1, Math.min(11, player.tileY + dy * 3));
+        if (this.map.isWalkable(targetTx, targetTy) && !this.bombManager.getBombAt(targetTx, targetTy)) {
+          this.particles.addItemGetParticles(player.x, player.y, '#38bdf8');
+          player.x = targetTx * 48 + 24;
+          player.y = targetTy * 48 + 24;
+          player.invulnerableTimer = Math.max(player.invulnerableTimer, 60);
+          player.ultraCooldownTimer = player.config.ultraCooldown;
+          sounds.playKick();
+          this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
+          if (player.config.id === 0) this.input.vibrate(0, 150, 0.6, 0.3);
+          return true;
+        }
+        return false;
+      }
+
+      case 'ULTRA_ALL_DETONATE': {
+        const myBombs = this.bombManager.bombs.filter((b) => b.ownerId === player.config.id);
+        if (myBombs.length > 0) {
+          for (const b of myBombs) {
+            b.timer = 1;
+            this.particles.addItemGetParticles(b.pixelX, b.pixelY, '#ef4444');
+          }
+          player.ultraCooldownTimer = player.config.ultraCooldown;
+          sounds.playHurry();
+          if (player.config.id === 0) this.input.vibrate(0, 200, 0.7, 0.4);
+          return true;
+        }
+        return false;
+      }
+
+      case 'ULTRA_NOVA_BOMB': {
+        if (player.activeBombs >= player.maxBombs) return false;
+        const overlappingPlayers = this.players
+          .filter((p) => p.isAlive && Math.hypot(p.x - (player.tileX * 48 + 24), p.y - (player.tileY * 48 + 24)) < 36)
+          .map((p) => p.config.id);
+        const bomb = this.bombManager.placeBomb(player.config.id, player.tileX, player.tileY, 8, overlappingPlayers);
+        if (bomb) {
+          player.activeBombs++;
+          player.lastPlacedBombId = bomb.id;
+          player.ultraCooldownTimer = player.config.ultraCooldown;
+          sounds.playHurry();
+          this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
+          this.particles.triggerShake(4, 10);
+          if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.4);
+          return true;
+        }
+        return false;
+      }
+
+      case 'ULTRA_FORTRESS': {
+        player.shield = 2;
+        player.invulnerableTimer = Math.max(player.invulnerableTimer, 120);
+        player.ultraCooldownTimer = player.config.ultraCooldown;
+        sounds.playShieldBreak();
+        this.particles.addItemGetParticles(player.x, player.y, '#10b981');
+        if (player.config.id === 0) this.input.vibrate(0, 180, 0.6, 0.3);
+        return true;
+      }
+
+      case 'ULTRA_METEOR_TACKLE': {
+        if (player.isColliding(player.x + dx * 16, player.y + dy * 16, this.map, this.bombManager)) {
+          return false;
+        }
+        player.startTackle(dx, dy, 3 * 48, 6.0, true, 'none');
+        player.ultraCooldownTimer = player.config.ultraCooldown;
+        sounds.playKick();
+        this.particles.addItemGetParticles(player.x, player.y, '#a855f7');
+        if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.3);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Executes a single sword slash in front of player (0..1 tiles) and stuns hit opponents for 3s
+   */
+  private performSlashHit(
+    player: Player,
+    dx: number,
+    dy: number,
+    flip: boolean,
+    isTempest: boolean = false
+  ) {
+    const baseAngle = Math.atan2(dy, dx);
+    const angleJitter = isTempest ? (Math.random() - 0.5) * 0.9 : 0;
+    const radius = isTempest ? 44 : 38;
+    const slashX = player.x + dx * 20;
+    const slashY = player.y + dy * 20;
+
+    this.particles.addSlashEffect(slashX, slashY, baseAngle + angleJitter, radius, isTempest ? '#7dd3fc' : '#38bdf8', flip);
+    sounds.playKick();
+
+    // Hit check across 0..1 tiles forward (center at player and +1 tile forward)
+    const hitPoints = [
+      { x: player.x, y: player.y },
+      { x: player.x + dx * 44, y: player.y + dy * 44 },
+    ];
+
+    for (const other of this.players) {
+      if (other.isAlive && other.config.id !== player.config.id) {
+        const hit = hitPoints.some((pt) => Math.hypot(other.x - pt.x, other.y - pt.y) < 36);
+        if (hit) {
+          other.stun(180); // 3 seconds stun
+          this.particles.addItemGetParticles(other.x, other.y, '#facc15');
+          this.particles.addExplosionParticles(other.x, other.y, 6);
+          this.particles.triggerShake(4, 10);
+          if (other.config.id === 0) {
+            this.input.vibrate(0, 260, 0.8, 0.4);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Updates Chen's 2-slash windup before transitioning to 0..2 tile slash rush
+   */
+  private updateChenSlashSequence(player: Player) {
+    if (!player.isAlive || player.stunTimer > 0) {
+      player.cancelTackle();
+      return;
+    }
+
+    player.slashSequenceTimer--;
+
+    // 2nd slash halfway through windup
+    if (player.slashSequenceTimer === 9) {
+      this.performSlashHit(player, player.slashSeqDx, player.slashSeqDy, true);
+      if (player.config.id === 0) {
+        this.input.vibrate(0, 100, 0.5, 0.25);
+      }
+    }
+
+    // Windup complete -> start 0..2 tile slash rush
+    if (player.slashSequenceTimer <= 0) {
+      player.slashSequenceTimer = 0;
+      const dx = player.slashSeqDx;
+      const dy = player.slashSeqDy;
+      if (!player.isColliding(player.x + dx * 16, player.y + dy * 16, this.map, this.bombManager)) {
+        player.startTackle(dx, dy, 2 * 48, 5.2, false, 'skill_rush');
+        this.updatePlayerTackle(player);
+      }
+    }
+  }
+
+  /**
+   * Updates continuous tackle / slash rush movement and collision
    */
   private updatePlayerTackle(player: Player) {
     if (!player.isTackling || !player.isAlive) return;
@@ -587,7 +801,7 @@ export class GameManager {
     if (player.isColliding(nextX, nextY, this.map, this.bombManager)) {
       player.cancelTackle();
       sounds.playWallThud();
-      this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
+      this.particles.addItemGetParticles(player.x, player.y, player.config.accentColor);
       this.particles.triggerShake(3, 8);
       return;
     }
@@ -596,12 +810,23 @@ export class GameManager {
     player.x = nextX;
     player.y = nextY;
     player.tackleRemainingDist -= step;
+    player.tackleSlashTick++;
     player.isMoving = true;
     player.animFrame += 2;
 
-    // Trail particle
-    if (Math.random() < 0.65) {
-      this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
+    // Trail & slash effects depending on mode
+    if (player.tackleSlashMode === 'skill_rush') {
+      if (player.tackleSlashTick % 6 === 1) {
+        this.performSlashHit(player, player.tackleDx, player.tackleDy, player.tackleSlashTick % 12 > 6, false);
+      }
+    } else if (player.tackleSlashMode === 'ultra_tempest') {
+      if (player.tackleSlashTick % 3 === 1) {
+        this.performSlashHit(player, player.tackleDx, player.tackleDy, player.tackleSlashTick % 6 > 3, true);
+      }
+    } else {
+      if (Math.random() < 0.65) {
+        this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
+      }
     }
 
     // Check collision against opponents
@@ -610,7 +835,8 @@ export class GameManager {
         const dist = Math.hypot(other.x - player.x, other.y - player.y);
         if (dist < 36) {
           player.tackleHitEnemies.add(other.config.id);
-          other.stun(180); // 3 seconds at 60fps
+          const stunDuration = player.config.ultraType === 'ULTRA_METEOR_TACKLE' && player.tackleSpeed > 5.5 ? 240 : 180;
+          other.stun(stunDuration); // 3 seconds (or 4s for Meteor Tackle)
           this.particles.addItemGetParticles(other.x, other.y, '#facc15');
           this.particles.addExplosionParticles(other.x, other.y, 8);
           this.particles.triggerShake(5, 12);
@@ -621,9 +847,10 @@ export class GameManager {
           if (other.config.id === 0) {
             this.input.vibrate(0, 300, 0.8, 0.5);
           }
-          // Stop tackle on impact
-          player.cancelTackle();
-          return;
+          if (player.tackleStopOnHit) {
+            player.cancelTackle();
+            return;
+          }
         }
       }
     }

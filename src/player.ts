@@ -34,16 +34,25 @@ export class Player {
 
   // Skill state
   public skillCooldownTimer: number = 0; // Cooldown frames remaining
+  public ultraCooldownTimer: number = 0; // Ultra skill cooldown frames remaining
   public hasMegaBomb: boolean = false; // Next bomb will be mega bomb
   public lastPlacedBombId: number | null = null; // For remote detonate
 
-  // Tackle state (e.g. Bomber Purple)
+  // Tackle / Rush state (Bomber Purple & Chen)
   public isTackling: boolean = false;
   public tackleDx: number = 0;
   public tackleDy: number = 0;
   public tackleRemainingDist: number = 0;
   public tackleSpeed: number = 5.0; // Moderate, readable rush speed
+  public tackleStopOnHit: boolean = true;
+  public tackleSlashMode: 'none' | 'skill_rush' | 'ultra_tempest' = 'none';
+  public tackleSlashTick: number = 0;
   public tackleHitEnemies: Set<number> = new Set();
+
+  // Chen's 2-slash windup sequence before rushing
+  public slashSequenceTimer: number = 0;
+  public slashSeqDx: number = 0;
+  public slashSeqDy: number = 0;
 
   public isAlive: boolean = true;
   public deathTimer: number = 0; // For death spin animation
@@ -73,6 +82,7 @@ export class Player {
     this.hasKick = false;
     this.shield = 0;
     this.skillCooldownTimer = 0;
+    this.ultraCooldownTimer = 0;
     this.hasMegaBomb = false;
     this.lastPlacedBombId = null;
     this.isTackling = false;
@@ -80,7 +90,13 @@ export class Player {
     this.tackleDy = 0;
     this.tackleRemainingDist = 0;
     this.tackleSpeed = 5.0;
+    this.tackleStopOnHit = true;
+    this.tackleSlashMode = 'none';
+    this.tackleSlashTick = 0;
     this.tackleHitEnemies.clear();
+    this.slashSequenceTimer = 0;
+    this.slashSeqDx = 0;
+    this.slashSeqDy = 0;
     this.isAlive = true;
     this.deathTimer = 0;
     this.stunTimer = 0;
@@ -375,14 +391,24 @@ export class Player {
   }
 
   /**
-   * Starts a tackle dash in the specified direction
+   * Starts a tackle or slash rush in the specified direction
    */
-  public startTackle(dx: number, dy: number, distance: number = 96, speed: number = 5.0) {
+  public startTackle(
+    dx: number,
+    dy: number,
+    distance: number = 96,
+    speed: number = 5.0,
+    stopOnHit: boolean = true,
+    slashMode: 'none' | 'skill_rush' | 'ultra_tempest' = 'none'
+  ) {
     this.isTackling = true;
     this.tackleDx = dx;
     this.tackleDy = dy;
     this.tackleRemainingDist = distance;
     this.tackleSpeed = speed;
+    this.tackleStopOnHit = stopOnHit;
+    this.tackleSlashMode = slashMode;
+    this.tackleSlashTick = 0;
     this.tackleHitEnemies.clear();
 
     // Corridor alignment: snap perpendicular axis to center of tile
@@ -396,11 +422,14 @@ export class Player {
   }
 
   /**
-   * Stops active tackle immediately
+   * Stops active tackle / slash sequence immediately
    */
   public cancelTackle() {
     this.isTackling = false;
     this.tackleRemainingDist = 0;
+    this.tackleSlashMode = 'none';
+    this.tackleSlashTick = 0;
     this.tackleHitEnemies.clear();
+    this.slashSequenceTimer = 0;
   }
 }

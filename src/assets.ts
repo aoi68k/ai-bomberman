@@ -28,12 +28,14 @@ export class AssetManager {
     char_bomber_red: ['/assets/images/characters/bomber_red/idle.png', '/assets/images/player_2.png'],
     char_bomber_green: ['/assets/images/characters/bomber_green/idle.png', '/assets/images/player_3.png'],
     char_bomber_purple: ['/assets/images/characters/bomber_purple/idle.png'],
+    char_chen: ['/assets/images/characters/chen/idle.png'],
 
     portrait_bomber_blue: ['/assets/images/characters/bomber_blue/portrait.png', '/assets/images/characters/bomber_blue/idle.png'],
     portrait_bomber_black: ['/assets/images/characters/bomber_black/portrait.png', '/assets/images/characters/bomber_black/idle.png'],
     portrait_bomber_red: ['/assets/images/characters/bomber_red/portrait.png', '/assets/images/characters/bomber_red/idle.png'],
     portrait_bomber_green: ['/assets/images/characters/bomber_green/portrait.png', '/assets/images/characters/bomber_green/idle.png'],
     portrait_bomber_purple: ['/assets/images/characters/bomber_purple/portrait.png', '/assets/images/characters/bomber_purple/idle.png'],
+    portrait_chen: ['/assets/images/characters/chen/portrait.png', '/assets/images/characters/chen/idle.png'],
 
     // Directional Walk Motions (4-directions x 2-frames for characters)
     bomber_blue_down_0: ['/assets/images/characters/bomber_blue/down_0.png'],
@@ -80,6 +82,15 @@ export class AssetManager {
     bomber_purple_left_1: ['/assets/images/characters/bomber_purple/left_1.png'],
     bomber_purple_right_0: ['/assets/images/characters/bomber_purple/right_0.png'],
     bomber_purple_right_1: ['/assets/images/characters/bomber_purple/right_1.png'],
+
+    chen_down_0: ['/assets/images/characters/chen/down_0.png'],
+    chen_down_1: ['/assets/images/characters/chen/down_1.png'],
+    chen_up_0: ['/assets/images/characters/chen/up_0.png'],
+    chen_up_1: ['/assets/images/characters/chen/up_1.png'],
+    chen_left_0: ['/assets/images/characters/chen/left_0.png'],
+    chen_left_1: ['/assets/images/characters/chen/left_1.png'],
+    chen_right_0: ['/assets/images/characters/chen/right_0.png'],
+    chen_right_1: ['/assets/images/characters/chen/right_1.png'],
 
     item_bomb_up: ['/assets/images/items/item_bomb_up.png'],
     item_fire_up: ['/assets/images/items/item_fire_up.png'],

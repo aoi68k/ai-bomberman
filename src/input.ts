@@ -6,6 +6,7 @@ export interface PlayerInput {
   bomb: boolean;    // Pressed this frame
   bombDown: boolean;// Held down
   skill: boolean;   // Skill button pressed this frame
+  ultra: boolean;   // Ultra skill button pressed this frame
   pause: boolean;   // Pause/Resume pressed
   restart: boolean; // Restart pressed
 }
@@ -145,8 +146,10 @@ export class InputManager {
     }
 
     let skill = false;
+    let ultra = false;
     if (playerId === 0) {
       skill = this.keysPressed.has('KeyE') || this.keysPressed.has('KeyK') || this.keysPressed.has('ShiftLeft') || this.keysPressed.has('ShiftRight') || this.keysPressed.has('KeyX');
+      ultra = this.keysPressed.has('KeyQ') || this.keysPressed.has('KeyC') || this.keysPressed.has('KeyF') || this.keysPressed.has('KeyL');
     }
 
     // 2. Gamepad Controls (Gamepad Index corresponds to Player ID)
@@ -237,10 +240,8 @@ export class InputManager {
 
       // Action Buttons for Skill:
       // Button 2: X (Xbox) / Square (PS)
-      // Button 3: Y (Xbox) / Triangle (PS)
       // Button 4: LB / L1
-      // Button 6: LT / L2
-      const skillButtons = [2, 3, 4, 6];
+      const skillButtons = [2, 4];
       for (const btnIndex of skillButtons) {
         const btn = pad.buttons[btnIndex];
         const isPressed = btn ? btn.pressed : false;
@@ -248,6 +249,20 @@ export class InputManager {
 
         if (isPressed && !prevButtons[btnIndex]) {
           skill = true;
+        }
+      }
+
+      // Action Buttons for Ultra Skill:
+      // Button 3: Y (Xbox) / Triangle (PS)
+      // Button 6: LT / L2
+      const ultraButtons = [3, 6];
+      for (const btnIndex of ultraButtons) {
+        const btn = pad.buttons[btnIndex];
+        const isPressed = btn ? btn.pressed : false;
+        currentButtons[btnIndex] = isPressed;
+
+        if (isPressed && !prevButtons[btnIndex]) {
+          ultra = true;
         }
       }
 
@@ -268,7 +283,7 @@ export class InputManager {
       this.prevPadButtons.set(pad.index, currentButtons);
     }
 
-    return { dx, dy, bomb, bombDown, skill, pause, restart };
+    return { dx, dy, bomb, bombDown, skill, ultra, pause, restart };
   }
 
   /**

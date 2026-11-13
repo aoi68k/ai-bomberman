@@ -95,6 +95,46 @@ export class ParticleManager {
     }
   }
 
+  public addSlashEffect(
+    px: number,
+    py: number,
+    angle: number,
+    radius: number = 38,
+    color: string = '#38bdf8',
+    flip: boolean = false
+  ) {
+    const life = 12;
+    this.slashes.push({
+      x: px,
+      y: py,
+      angle,
+      radius,
+      color,
+      life,
+      maxLife: life,
+      flip,
+    });
+
+    // Accompanying sword sparks
+    for (let i = 0; i < 6; i++) {
+      const a = angle + (Math.random() - 0.5) * 1.4;
+      const spd = 2.0 + Math.random() * 3.5;
+      const pLife = 10 + Math.floor(Math.random() * 8);
+      this.particles.push({
+        x: px + Math.cos(a) * (radius * 0.4),
+        y: py + Math.sin(a) * (radius * 0.4),
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        size: 2.5 + Math.random() * 2,
+        color: i % 2 === 0 ? '#ffffff' : color,
+        alpha: 1.0,
+        life: pLife,
+        maxLife: pLife,
+        shape: 'spark',
+      });
+    }
+  }
+
   public update() {
     // Screen shake update
     if (this.shakeDuration > 0) {
@@ -117,6 +157,14 @@ export class ParticleManager {
 
       if (p.life <= 0) {
         this.particles.splice(i, 1);
+      }
+    }
+
+    // Slashes update
+    for (let i = this.slashes.length - 1; i >= 0; i--) {
+      this.slashes[i].life--;
+      if (this.slashes[i].life <= 0) {
+        this.slashes.splice(i, 1);
       }
     }
   }
@@ -151,6 +199,38 @@ export class ParticleManager {
         ctx.fillRect(p.x - p.size * 0.3, p.y - p.size, p.size * 0.6, p.size * 2);
       }
     }
+
+    // Render sharp crescent slash arcs
+    for (const s of this.slashes) {
+      const progress = 1 - s.life / s.maxLife;
+      const alpha = Math.max(0, s.life / s.maxLife);
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.angle);
+      if (s.flip) ctx.scale(1, -1);
+
+      ctx.globalAlpha = alpha;
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 12;
+
+      // Outer glowing arc
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 7 * (1 - progress * 0.5);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(0, 0, s.radius, -Math.PI * 0.42, Math.PI * 0.42);
+      ctx.stroke();
+
+      // Inner white hot blade core
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3 * (1 - progress * 0.4);
+      ctx.beginPath();
+      ctx.arc(2, 0, s.radius * 0.96, -Math.PI * 0.36, Math.PI * 0.36);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 }
