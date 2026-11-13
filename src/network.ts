@@ -154,10 +154,13 @@ export class NetworkManager {
 
   public getInviteUrl(): string {
     if (!this.roomCode) return '';
-    const url = new URL(window.location.href);
-    url.searchParams.delete('popup');
-    url.searchParams.set('room', this.roomCode);
-    return url.toString();
+    const base = window.location.protocol.startsWith('http')
+      ? new URL('invite.html', window.location.href)
+      : new URL(window.location.href);
+    base.search = '';
+    base.hash = '';
+    base.searchParams.set('room', this.roomCode);
+    return base.toString();
   }
 
   public getConnectedSlots(): number[] {

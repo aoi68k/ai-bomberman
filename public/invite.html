@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>工業爆弾 - オンライン対戦 招待リンク</title>
+    <meta name="description" content="必殺技で戦う最大4人ボムバトル！オンラインマルチプレイの招待リンクです。クリックしてルームに参加しよう。" />
+    <meta name="theme-color" content="#ffcf00" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="工業爆弾 (AI Bomber)" />
+    <meta property="og:title" content="工業爆弾 - オンライン対戦 招待リンク" />
+    <meta property="og:description" content="必殺技で戦う最大4人ボムバトル！オンラインマルチプレイの招待リンクです。クリックしてルームに参加しよう。" />
+    <meta property="og:image" content="https://aoi68k.github.io/ai-bomberman/assets/images/og_invite.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="320" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="工業爆弾 - オンライン対戦 招待リンク" />
+    <meta name="twitter:description" content="必殺技で戦う最大4人ボムバトル！オンラインマルチプレイの招待リンクです。" />
+    <meta name="twitter:image" content="https://aoi68k.github.io/ai-bomberman/assets/images/og_invite.png" />
+    <style>
+      body {
+        margin: 0;
+        background: #0d0f12;
+        color: #f4f4f0;
+        font-family: system-ui, -apple-system, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .card {
+        background: #15181e;
+        border: 1px solid #343a46;
+        border-top: 3px solid #ffcf00;
+        padding: 24px 32px;
+        text-align: center;
+      }
+      a { color: #ffcf00; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <p>オンライン対戦ルームへ移動しています...</p>
+      <p><a id="fallbackLink" href="./">自動で切り替わらない場合はこちらをクリック</a></p>
+    </div>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var room = params.get('room');
+        var target = room ? './?room=' + encodeURIComponent(room) : './';
+        var link = document.getElementById('fallbackLink');
+        if (link) link.href = target;
+        window.location.replace(target);
+      })();
+    </script>
+  </body>
+</html>
