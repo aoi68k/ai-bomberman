@@ -22,14 +22,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // UI Elements
   const timerBadge = document.getElementById('timerBadge') as HTMLElement;
-  const btnTitle = document.getElementById('btnTitle') as HTMLButtonElement;
-  const btnSetup = document.getElementById('btnSetup') as HTMLButtonElement;
-  const btnBgm = document.getElementById('btnBgm') as HTMLButtonElement;
-  const btnSfx = document.getElementById('btnSfx') as HTMLButtonElement;
-  const btnVibration = document.getElementById('btnVibration') as HTMLButtonElement;
-  const btnReset = document.getElementById('btnReset') as HTMLButtonElement;
-  const btnFullscreen = document.getElementById('btnFullscreen') as HTMLButtonElement;
-  const btnPopup = document.getElementById('btnPopup') as HTMLButtonElement;
+  const btnBgm = document.getElementById('btnBgm') as HTMLButtonElement | null;
+  const btnSfx = document.getElementById('btnSfx') as HTMLButtonElement | null;
+  const btnFullscreen = document.getElementById('btnFullscreen') as HTMLButtonElement | null;
+  const btnPopup = document.getElementById('btnPopup') as HTMLButtonElement | null;
   const gamepadStatus = document.getElementById('gamepadStatus') as HTMLElement;
   const gamepadIndicator = document.getElementById('gamepadIndicator') as HTMLElement;
 
@@ -1106,24 +1102,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   const toggleBgm = () => {
     const isPlaying = sounds.toggleBGM();
     const label = isPlaying ? '🎵 BGM: ON' : '🎵 BGM: OFF';
-    btnBgm.textContent = label;
-    btnBgm.style.borderColor = isPlaying ? 'var(--accent-emerald)' : '#334155';
+    if (btnBgm) {
+      btnBgm.textContent = label;
+      btnBgm.style.borderColor = isPlaying ? 'var(--accent-emerald)' : '#334155';
+    }
     if (pauseBtnBgm) pauseBtnBgm.textContent = label;
   };
 
   const toggleSfx = () => {
     const isMuted = sounds.toggleMute();
     const label = isMuted ? '🔇 SE: OFF' : '🔊 SE: ON';
-    btnSfx.textContent = label;
-    btnSfx.style.borderColor = isMuted ? 'var(--accent-rose)' : '#334155';
+    if (btnSfx) {
+      btnSfx.textContent = label;
+      btnSfx.style.borderColor = isMuted ? 'var(--accent-rose)' : '#334155';
+    }
     if (pauseBtnSfx) pauseBtnSfx.textContent = label;
   };
 
   const toggleVibration = () => {
     const enabled = game.input.toggleVibration();
     const label = enabled ? '📳 振動: ON' : '📴 振動: OFF';
-    btnVibration.textContent = label;
-    btnVibration.style.borderColor = enabled ? '#334155' : 'var(--accent-rose)';
     if (pauseBtnVibration) pauseBtnVibration.textContent = label;
     updateGamepadUI(game.input.getConnectedGamepads());
   };
@@ -1203,26 +1201,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Button Controls
-  btnBgm.addEventListener('click', toggleBgm);
-  btnSfx.addEventListener('click', toggleSfx);
-  btnVibration?.addEventListener('click', toggleVibration);
-
-  btnReset.addEventListener('click', () => {
-    if (game.state === 'TITLE' || game.state === 'SETUP') {
-      startBattleFromSetup();
-    } else {
-      if (net.role === 'GUEST') return;
-      game.startRound();
-      if (net.role === 'HOST') {
-        net.broadcastSnapshot(game.exportSnapshot());
-      }
-    }
-  });
+  btnBgm?.addEventListener('click', toggleBgm);
+  btnSfx?.addEventListener('click', toggleSfx);
 
   const syncBgmBtnUI = (isPlaying: boolean) => {
     const label = isPlaying ? '🎵 BGM: ON' : '🎵 BGM: OFF';
-    btnBgm.textContent = label;
-    btnBgm.style.borderColor = isPlaying ? 'var(--accent-emerald)' : '#334155';
+    if (btnBgm) {
+      btnBgm.textContent = label;
+      btnBgm.style.borderColor = isPlaying ? 'var(--accent-emerald)' : '#334155';
+    }
     if (pauseBtnBgm) pauseBtnBgm.textContent = label;
   };
 
