@@ -5,7 +5,7 @@
 
 🎮 **Play Now (GitHub Pages)**: https://aoi68k.github.io/ai-bomberman/
 
-![Preview](https://raw.githubusercontent.com/aoi68k/ai-bomberman/main/public/og-preview.png)
+![Preview](https://raw.githubusercontent.com/aoi68k/ai-bomberman/main/preview.png)
 
 ## ✨ 特徴 (Features)
 
@@ -93,12 +93,12 @@ npm run build
 ```text
 ai-bomberman/
 ├── index.html                  # メインHTML（OGP・招待URL動的メタタグ対応）
+├── preview.png                 # README用ゲームプレビュー画像
 ├── package.json                # プロジェクト設定
 ├── ASSET_GUIDELINES.md         # 画像・キャラクター追加ガイドライン
 ├── public/
-│   ├── og-preview.png          # サイト共有用OGPプレビュー画像 (1200x630)
-│   ├── og-invite.png           # マルチプレイ招待URL用バナー画像 (1200x360)
-│   └── assets/images/          # キャラクター(character.json)・背景・アイテム画像
+│   ├── invite.html             # マルチプレイ招待URL用ランディングHTML
+│   └── assets/images/          # キャラクター(character.json)・背景・アイテム・OGP画像
 └── src/
     ├── main.ts                 # アプリケーション初期化・ロビー＆HUD UI連携
     ├── game.ts                 # ゲームメインループ・スキル処理・スナップショット同期

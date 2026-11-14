@@ -22,11 +22,11 @@
 特に `characters/<キャラID>/character.json` を配置するだけで、ゲーム起動時に自動でキャラクター一覧に読み込まれます。
 
 ```text
-public/
-├── og-preview.png               # 通常リンク共有用OGP画像 (1200×630)
-├── og-invite.png                # マルチプレイ招待リンク用OGP画像 (1200×360 横長バナー)
-└── assets/images/
-    ├── characters/
+public/assets/images/
+├── title_logo.png               # タイトルロゴ画像
+├── og_preview.png               # 通常リンク共有用OGP画像 (1200×630)
+├── og_invite.png                # マルチプレイ招待リンク用OGP画像 (1200×360 横長バナー)
+├── characters/
     │   ├── bomber_blue/         # キャラ1: ボンバーブルー（オールラウンダー）
     │   │   ├── character.json           # キャラ定義・ステータス・スキル設定ファイル
     │   │   ├── down_0.png, down_1.png   # 正面（下）歩行モーション 2コマ
