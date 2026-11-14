@@ -528,12 +528,11 @@ export class GameRenderer {
     const motionKey = `${p.config.charId}_${p.facing}_${walkFrame}`;
     const playerImg = assets.getImage(motionKey) ||
                       assets.getImage(`${p.config.charId}_${p.facing}_0`) ||
-                      assets.getImage(`char_${p.config.charId}`) ||
-                      assets.getImage(`player_${p.config.id}`);
+                      assets.getImage(`char_${p.config.charId}`);
 
     if (playerImg) {
       ctx.save();
-      // Only flip horizontally if we fall back to a generic char_/player_ image facing left
+      // Only flip horizontally if we fall back to a generic char_ image facing left
       const isMotionImage = assets.hasImage(motionKey) || assets.hasImage(`${p.config.charId}_${p.facing}_0`);
       if (!isMotionImage && p.facing === 'left') {
         ctx.scale(-1, 1);

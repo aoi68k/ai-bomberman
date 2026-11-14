@@ -3,7 +3,6 @@
 
 export type ImageKey = string;
 
-import { DEFAULT_IMAGE_BASE64 } from './defaultImages';
 import { CharacterInfo } from './constants';
 
 export class AssetManager {
@@ -18,11 +17,6 @@ export class AssetManager {
     soft_block: ['assets/images/environment/soft_block.png'],
     floor: ['assets/images/environment/floor.png'],
     bomb: ['assets/images/items/bomb.png'],
-
-    player_0: ['assets/images/characters/bomber_blue/idle.png'],
-    player_1: ['assets/images/characters/bomber_black/idle.png'],
-    player_2: ['assets/images/characters/bomber_red/idle.png'],
-    player_3: ['assets/images/characters/bomber_green/idle.png'],
 
     char_bomber_blue: ['assets/images/characters/bomber_blue/idle.png'],
     char_bomber_black: ['assets/images/characters/bomber_black/idle.png'],
@@ -131,20 +125,7 @@ export class AssetManager {
         let index = 0;
         const tryNext = () => {
           if (index >= urls.length) {
-            // Check if we have embedded default base64 PNG
-            const b64 = DEFAULT_IMAGE_BASE64[key];
-            if (b64) {
-              const b64Img = new Image();
-              b64Img.onload = () => {
-                this.images.set(key as ImageKey, b64Img);
-                this.loaded.add(key as ImageKey);
-                resolve();
-              };
-              b64Img.onerror = () => resolve();
-              b64Img.src = b64;
-            } else {
-              resolve();
-            }
+            resolve();
             return;
           }
 
