@@ -645,7 +645,10 @@ export class GameManager {
           this.bombManager,
           this.players,
           (p) => this.tryPlaceBomb(p),
-          sharedDangerMap
+          sharedDangerMap,
+          (p) => this.tryUseSkill(p),
+          (p) => this.tryUseUltra(p),
+          (p) => this.tryUseChainBomb(p)
         );
       }
     }
