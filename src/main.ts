@@ -63,35 +63,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const chkItemShield = document.getElementById('chkItemShield') as HTMLInputElement | null;
   const chkItemChainBomb = document.getElementById('chkItemChainBomb') as HTMLInputElement | null;
+  const chkItemKick = document.getElementById('chkItemKick') as HTMLInputElement | null;
 
   const getItemSettings = (): ItemSettings => ({
     shield: chkItemShield ? chkItemShield.checked : true,
     chainBomb: chkItemChainBomb ? chkItemChainBomb.checked : true,
+    kick: chkItemKick ? chkItemKick.checked : true,
   });
 
   const applyItemSettingsToGame = (settings: ItemSettings) => {
     if (chkItemShield) chkItemShield.checked = settings.shield;
     if (chkItemChainBomb) chkItemChainBomb.checked = settings.chainBomb;
+    if (chkItemKick) chkItemKick.checked = settings.kick ?? true;
     game.setItemSettings(settings);
   };
 
-  chkItemShield?.addEventListener('change', () => {
+  const onItemSettingChange = () => {
     if (net.role === 'GUEST') return;
     const settings = getItemSettings();
     game.setItemSettings(settings);
     if (net.role === 'HOST') {
       net.broadcastLobbySync(draftSlots, playerCursors, settings);
     }
-  });
+  };
 
-  chkItemChainBomb?.addEventListener('change', () => {
-    if (net.role === 'GUEST') return;
-    const settings = getItemSettings();
-    game.setItemSettings(settings);
-    if (net.role === 'HOST') {
-      net.broadcastLobbySync(draftSlots, playerCursors, settings);
-    }
-  });
+  chkItemShield?.addEventListener('change', onItemSettingChange);
+  chkItemChainBomb?.addEventListener('change', onItemSettingChange);
+  chkItemKick?.addEventListener('change', onItemSettingChange);
 
   const charList = Object.values(CHARACTERS);
   const DRAFT_SLOTS_SESSION_KEY = 'abm_draft_slots';
@@ -246,6 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnModeOnline.classList.toggle('pad-focused', showPadFocus && setupArea === 'mode' && modeFocus === 1);
     chkItemShield?.closest('.rule-checkbox-label')?.classList.toggle('pad-focused', showPadFocus && setupArea === 'rules' && rulesFocus === 0);
     chkItemChainBomb?.closest('.rule-checkbox-label')?.classList.toggle('pad-focused', showPadFocus && setupArea === 'rules' && rulesFocus === 1);
+    chkItemKick?.closest('.rule-checkbox-label')?.classList.toggle('pad-focused', showPadFocus && setupArea === 'rules' && rulesFocus === 2);
     btnBackToTitle.classList.toggle('pad-focused', showPadFocus && setupArea === 'footer' && footerFocus === 0);
     btnBattleStart.classList.toggle('pad-focused', showPadFocus && setupArea === 'footer' && footerFocus === 1);
 
@@ -389,6 +388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     game.isOnlineGuest = false;
     if (chkItemShield) chkItemShield.disabled = false;
     if (chkItemChainBomb) chkItemChainBomb.disabled = false;
+    if (chkItemKick) chkItemKick.disabled = false;
     draftSlots.forEach((s, idx) => {
       if (s.control === 'REMOTE') {
         s.control = idx === 0 ? '1P' : 'COM';
@@ -442,6 +442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     game.isOnlineGuest = false;
     if (chkItemShield) chkItemShield.disabled = false;
     if (chkItemChainBomb) chkItemChainBomb.disabled = false;
+    if (chkItemKick) chkItemKick.disabled = false;
 
     // Ensure slot 0 is 1P (Host) and sync cursors to currently selected characters
     draftSlots.forEach((s, idx) => {
@@ -543,6 +544,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyItemSettingsToGame(itemSettings);
     if (chkItemShield) chkItemShield.disabled = true;
     if (chkItemChainBomb) chkItemChainBomb.disabled = true;
+    if (chkItemKick) chkItemKick.disabled = true;
 
     if (
       hostState === 'SETUP' ||
@@ -605,6 +607,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (snap.itemSettings) {
       if (chkItemShield) chkItemShield.checked = snap.itemSettings.shield;
       if (chkItemChainBomb) chkItemChainBomb.checked = snap.itemSettings.chainBomb;
+      if (chkItemKick) chkItemKick.checked = snap.itemSettings.kick ?? true;
     }
     if (
       snap.state === 'PLAYING' ||
@@ -899,7 +902,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       } else if (setupArea === 'rules') {
         if (input.dx !== 0) {
-          rulesFocus = input.dx > 0 ? 1 : 0;
+          rulesFocus = Math.max(0, Math.min(2, rulesFocus + (input.dx > 0 ? 1 : -1)));
         }
         if (input.dy < 0) {
           setupArea = 'roster';
@@ -908,7 +911,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           footerFocus = btnBattleStart.disabled ? 0 : 1;
         }
         if (input.confirm && !isGuest) {
-          const targetChk = rulesFocus === 0 ? chkItemShield : chkItemChainBomb;
+          const targetChk = rulesFocus === 0 ? chkItemShield : rulesFocus === 1 ? chkItemChainBomb : chkItemKick;
           if (targetChk && !targetChk.disabled) {
             targetChk.checked = !targetChk.checked;
             targetChk.dispatchEvent(new Event('change'));

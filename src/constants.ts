@@ -31,11 +31,13 @@ export type ItemType = typeof ITEM[keyof typeof ITEM];
 export interface ItemSettings {
   shield: boolean;
   chainBomb: boolean;
+  kick: boolean;
 }
 
 export const DEFAULT_ITEM_SETTINGS: ItemSettings = {
   shield: true,
   chainBomb: true,
+  kick: true,
 };
 
 export interface ItemData {

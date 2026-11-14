@@ -81,8 +81,10 @@ export class GameMap {
       { type: ITEM.FIRE_UP, weight: 26 },
       { type: ITEM.BOMB_UP, weight: 26 },
       { type: ITEM.SPEED_UP, weight: 22 },
-      { type: ITEM.KICK, weight: 14 },
     ];
+    if (settings.kick !== false) {
+      pool.push({ type: ITEM.KICK, weight: 14 });
+    }
     if (settings.shield) {
       pool.push({ type: ITEM.SHIELD, weight: 10 });
     }
