@@ -80,7 +80,7 @@ export class Player {
     this.speed = this.config.stats?.initialSpeed ?? INITIAL_PLAYER_SPEED;
     this.maxBombs = this.config.stats?.initialBombs ?? INITIAL_BOMBS;
     this.activeBombs = 0;
-    this.power = this.config.stats?.initialPower ?? INITIAL_POWER;
+    this.power = Math.max(INITIAL_POWER, this.config.stats?.initialPower ?? INITIAL_POWER);
     this.hasKick = false;
     this.shield = 0;
     this.chainBombAmmo = 0;

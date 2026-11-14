@@ -8,7 +8,7 @@
   "accentColor": "#2dd4bf",
   "stats": {
     "initialBombs": 1,
-    "initialPower": 1,
+    "initialPower": 2,
     "initialSpeed": 2.7
   },
   "skillType": "YANGYANG_WIND_SLASH",
