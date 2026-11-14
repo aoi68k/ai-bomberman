@@ -137,8 +137,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const slotColors = PLAYER_SLOT_COLORS;
   let activeSlotIdx = 0; // 0..3: slot currently receiving character selection
-  let setupArea: 'roster' | 'footer' = 'roster';
+  let setupArea: 'mode' | 'roster' | 'rules' | 'footer' = 'roster';
+  let modeFocus = 0; // 0: local, 1: online
   let rosterFocus = getCharIndex(draftSlots[0]?.charId); // 0..charList.length-1
+  let rulesFocus = 0; // 0: shield, 1: chainBomb
   let footerFocus = 1; // 0: back, 1: battle start
   let pauseFocus = 0; // 0..7: pause menu buttons
   let showPadFocus = false;
@@ -240,6 +242,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
+    btnModeLocal.classList.toggle('pad-focused', showPadFocus && setupArea === 'mode' && modeFocus === 0);
+    btnModeOnline.classList.toggle('pad-focused', showPadFocus && setupArea === 'mode' && modeFocus === 1);
+    chkItemShield?.closest('.rule-checkbox-label')?.classList.toggle('pad-focused', showPadFocus && setupArea === 'rules' && rulesFocus === 0);
+    chkItemChainBomb?.closest('.rule-checkbox-label')?.classList.toggle('pad-focused', showPadFocus && setupArea === 'rules' && rulesFocus === 1);
     btnBackToTitle.classList.toggle('pad-focused', showPadFocus && setupArea === 'footer' && footerFocus === 0);
     btnBattleStart.classList.toggle('pad-focused', showPadFocus && setupArea === 'footer' && footerFocus === 1);
 
@@ -827,7 +833,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
 
-      if (setupArea === 'roster') {
+      if (setupArea === 'mode') {
+        if (input.dx !== 0) {
+          modeFocus = input.dx > 0 ? 1 : 0;
+        }
+        if (input.dy > 0) {
+          setupArea = 'roster';
+        }
+        if (input.confirm) {
+          if (modeFocus === 0) {
+            btnModeLocal.click();
+          } else {
+            btnModeOnline.click();
+          }
+        }
+      } else if (setupArea === 'roster') {
         const prevFocus = rosterFocus;
         if (input.dx !== 0) {
           const next = rosterFocus + input.dx * 2;
@@ -838,13 +858,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (input.dy > 0) {
           if (rosterFocus % 2 === 0 && rosterFocus + 1 < charList.length) {
             rosterFocus += 1;
+          } else if (!isGuest) {
+            setupArea = 'rules';
           } else {
             setupArea = 'footer';
-            footerFocus = 1;
+            footerFocus = 0;
           }
         } else if (input.dy < 0) {
           if (rosterFocus % 2 === 1) {
             rosterFocus -= 1;
+          } else if (!isGuest) {
+            setupArea = 'mode';
+            modeFocus = btnModeOnline.classList.contains('active') ? 1 : 0;
           }
         }
 
@@ -872,13 +897,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             game.setPlayerSlots(draftSlots);
           }
         }
+      } else if (setupArea === 'rules') {
+        if (input.dx !== 0) {
+          rulesFocus = input.dx > 0 ? 1 : 0;
+        }
+        if (input.dy < 0) {
+          setupArea = 'roster';
+        } else if (input.dy > 0) {
+          setupArea = 'footer';
+          footerFocus = btnBattleStart.disabled ? 0 : 1;
+        }
+        if (input.confirm && !isGuest) {
+          const targetChk = rulesFocus === 0 ? chkItemShield : chkItemChainBomb;
+          if (targetChk && !targetChk.disabled) {
+            targetChk.checked = !targetChk.checked;
+            targetChk.dispatchEvent(new Event('change'));
+          }
+        }
       } else {
         // footer area
         if (input.dx !== 0) {
           footerFocus = input.dx > 0 ? 1 : 0;
         }
         if (input.dy < 0) {
-          setupArea = 'roster';
+          setupArea = isGuest ? 'roster' : 'rules';
         }
         if (input.confirm) {
           if (footerFocus === 0) {
