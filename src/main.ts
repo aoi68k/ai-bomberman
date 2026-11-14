@@ -723,8 +723,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnStartSetup.addEventListener('click', showSetupScreen);
   btnBackToTitle.addEventListener('click', showTitleScreen);
   btnBattleStart.addEventListener('click', startBattleFromSetup);
-  btnTitle.addEventListener('click', showTitleScreen);
-  btnSetup.addEventListener('click', showSetupScreen);
 
   window.addEventListener('keydown', (e) => {
     if (game.state === 'TITLE' && (e.code === 'Enter' || e.code === 'Space')) {
