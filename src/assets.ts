@@ -14,20 +14,20 @@ export class AssetManager {
    * Defines candidate file paths for each image resource
    */
   private assetManifest: Record<string, string[]> = {
-    wall: ['assets/images/environment/wall.png', 'assets/images/wall.png', 'assets/images/environment/wall.png'],
-    soft_block: ['assets/images/environment/soft_block.png', 'assets/images/soft_block.png', 'assets/images/environment/soft_block.png'],
-    floor: ['assets/images/environment/floor.png', 'assets/images/floor.png', 'assets/images/environment/floor.png'],
-    bomb: ['assets/images/items/bomb.png', 'assets/images/bomb.png', 'assets/images/items/bomb.png'],
+    wall: ['assets/images/environment/wall.png'],
+    soft_block: ['assets/images/environment/soft_block.png'],
+    floor: ['assets/images/environment/floor.png'],
+    bomb: ['assets/images/items/bomb.png'],
 
-    player_0: ['assets/images/characters/bomber_blue/idle.png', 'assets/images/player_0.png'],
-    player_1: ['assets/images/characters/bomber_black/idle.png', 'assets/images/player_1.png'],
-    player_2: ['assets/images/characters/bomber_red/idle.png', 'assets/images/player_2.png'],
-    player_3: ['assets/images/characters/bomber_green/idle.png', 'assets/images/player_3.png'],
+    player_0: ['assets/images/characters/bomber_blue/idle.png'],
+    player_1: ['assets/images/characters/bomber_black/idle.png'],
+    player_2: ['assets/images/characters/bomber_red/idle.png'],
+    player_3: ['assets/images/characters/bomber_green/idle.png'],
 
-    char_bomber_blue: ['assets/images/characters/bomber_blue/idle.png', 'assets/images/player_0.png'],
-    char_bomber_black: ['assets/images/characters/bomber_black/idle.png', 'assets/images/player_1.png'],
-    char_bomber_red: ['assets/images/characters/bomber_red/idle.png', 'assets/images/player_2.png'],
-    char_bomber_green: ['assets/images/characters/bomber_green/idle.png', 'assets/images/player_3.png'],
+    char_bomber_blue: ['assets/images/characters/bomber_blue/idle.png'],
+    char_bomber_black: ['assets/images/characters/bomber_black/idle.png'],
+    char_bomber_red: ['assets/images/characters/bomber_red/idle.png'],
+    char_bomber_green: ['assets/images/characters/bomber_green/idle.png'],
     char_bomber_purple: ['assets/images/characters/bomber_purple/idle.png'],
     char_chen: ['assets/images/characters/chen/idle.png'],
 
