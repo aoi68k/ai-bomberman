@@ -422,20 +422,10 @@ export class GameManager {
     if (this.isOnlineGuest) {
       const guestInput = this.input.getPlayerInput(0);
       if (this.state === 'PLAYING' || this.state === 'COUNTDOWN') {
-        let chainBombPressed = false;
-        if (guestInput.bomb) {
-          const now = performance.now();
-          const lastTap = this.lastBombPressTime.get(0) || 0;
-          this.lastBombPressTime.set(0, now);
-          if (now - lastTap < 280) {
-            chainBombPressed = true;
-          }
-        }
         const payload: RemoteInputPayload = {
           dx: guestInput.dx,
           dy: guestInput.dy,
           bomb: guestInput.bomb,
-          chainBomb: chainBombPressed,
           skill: guestInput.skill,
           ultra: guestInput.ultra,
         };
@@ -443,7 +433,6 @@ export class GameManager {
           payload.dx !== this.lastGuestInputSent.dx ||
           payload.dy !== this.lastGuestInputSent.dy ||
           payload.bomb ||
-          payload.chainBomb ||
           payload.skill ||
           payload.ultra;
         this.syncTickCounter++;
@@ -588,13 +577,12 @@ export class GameManager {
           this.emitSound('kick');
         });
 
-        if (hInput.chainBomb && hp.chainBombAmmo > 0) {
-          this.tryUseChainBomb(hp);
-        } else if (hInput.bomb) {
-          const now = performance.now();
-          const lastPress = this.lastBombPressTime.get(hp.config.id) || 0;
-          this.lastBombPressTime.set(hp.config.id, now);
-          if (now - lastPress < 280 && hp.chainBombAmmo > 0) {
+        if (hInput.bomb) {
+          const standingOnBomb = Boolean(this.bombManager.getBombAt(hp.tileX, hp.tileY));
+          if (
+            standingOnBomb &&
+            (hp.chainBombAmmo > 0 || (hp.config.skillType === 'CHAIN_BOMB' && hp.skillCooldownTimer === 0))
+          ) {
             this.tryUseChainBomb(hp);
           } else {
             this.tryPlaceBomb(hp);
@@ -602,9 +590,7 @@ export class GameManager {
         }
 
         if (hInput.skill) {
-          if (hp.chainBombAmmo > 0) {
-            this.tryUseChainBomb(hp);
-          } else if (this.tryUseSkill(hp)) {
+          if (this.tryUseSkill(hp)) {
             if (hp.isTackling) {
               this.updatePlayerTackle(hp);
             }
@@ -806,12 +792,19 @@ export class GameManager {
   }
 
   /**
-   * Executes Chain Bomb (連爆) skill: places a line of bombs in player's facing direction with cascading chain fuses
+   * Executes Chain Bomb (連爆) skill: when standing on a placed bomb, places remaining available bombs in facing direction
    */
   public tryUseChainBomb(player: Player): boolean {
     if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
     if (player.chainBombAmmo <= 0 && player.config.skillType !== 'CHAIN_BOMB') return false;
     if (player.config.skillType === 'CHAIN_BOMB' && player.chainBombAmmo <= 0 && player.skillCooldownTimer > 0) return false;
+
+    // Must be standing on an already-placed bomb
+    const standingBomb = this.bombManager.getBombAt(player.tileX, player.tileY);
+    if (!standingBomb) return false;
+
+    const availableBombs = player.maxBombs - player.activeBombs;
+    if (availableBombs <= 0) return false;
 
     const dirs = {
       up: { dx: 0, dy: -1 },
@@ -823,13 +816,8 @@ export class GameManager {
 
     const targetTiles: Array<{ x: number; y: number }> = [];
 
-    // Check tile under player first (if empty)
-    if (!this.bombManager.getBombAt(player.tileX, player.tileY)) {
-      targetTiles.push({ x: player.tileX, y: player.tileY });
-    }
-
-    // Extend forward along facing direction up to 4 tiles
-    for (let step = 1; step <= 4; step++) {
+    // Extend forward along facing direction up to currently available bomb count
+    for (let step = 1; step <= availableBombs; step++) {
       const tx = player.tileX + dx * step;
       const ty = player.tileY + dy * step;
 
@@ -838,7 +826,6 @@ export class GameManager {
       if (this.bombManager.getBombAt(tx, ty)) break;
 
       targetTiles.push({ x: tx, y: ty });
-      if (targetTiles.length >= 4) break;
     }
 
     if (targetTiles.length === 0) {
@@ -857,8 +844,8 @@ export class GameManager {
         placedAny = true;
         player.activeBombs++;
         player.lastPlacedBombId = bomb.id;
-        // Cascading chain fuse: 85 frames (~1.4s) + 10 frames per subsequent bomb in line
-        bomb.timer = 85 + i * 10;
+        // Chain cleanly right after the standing bomb
+        bomb.timer = Math.min(150, Math.max(40, standingBomb.timer) + (i + 1) * 8);
         this.particles.addItemGetParticles(bomb.pixelX, bomb.pixelY, '#fbbf24');
       }
     }
@@ -893,9 +880,6 @@ export class GameManager {
    */
   public tryUseSkill(player: Player): boolean {
     if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
-    if (player.chainBombAmmo > 0) {
-      return this.tryUseChainBomb(player);
-    }
     if (player.skillCooldownTimer > 0) return false;
 
     const skillType = player.config.skillType;

@@ -697,9 +697,11 @@ export class AIController {
   ): boolean {
     const { dx, dy } = this.getFacingVector();
 
-    // Chain Bomb item ammo or CHAIN_BOMB character skill
+    // Chain Bomb item ammo or CHAIN_BOMB character skill (requires standing on a placed bomb & available bomb capacity)
     if (this.player.chainBombAmmo > 0 || (this.player.config.skillType === 'CHAIN_BOMB' && this.player.skillCooldownTimer === 0)) {
-      if (!isCurrentTileDangerous && (requestUseChainBomb || requestUseSkill)) {
+      const standingOnBomb = Boolean(bombManager.getBombAt(myTx, myTy));
+      const hasAvailableBombs = this.player.maxBombs - this.player.activeBombs > 0;
+      if (standingOnBomb && hasAvailableBombs && (requestUseChainBomb || requestUseSkill)) {
         // Ensure a perpendicular escape tile exists so COM does not trap itself in a line of bombs
         const perp = dx !== 0 ? [{ px: 0, py: -1 }, { px: 0, py: 1 }] : [{ px: -1, py: 0 }, { px: 1, py: 0 }];
         const hasSideEscape = perp.some(
@@ -711,12 +713,11 @@ export class AIController {
         if (
           hasSideEscape &&
           (this.hasEnemyInFront(myTx, myTy, 5, allPlayers, map) || this.hasAdjacentSoftBlock(myTx, myTy, map)) &&
-          Math.random() < 0.35
+          Math.random() < 0.45
         ) {
           return (requestUseChainBomb ?? requestUseSkill)!(this.player);
         }
       }
-      if (this.player.chainBombAmmo > 0) return false;
     }
 
     if (!requestUseSkill || this.player.skillCooldownTimer > 0) return false;
