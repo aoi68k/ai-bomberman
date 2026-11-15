@@ -17,6 +17,6 @@
   "skillCooldown": 300,
   "ultraType": "AEMEATH_SPEAR_STRIKE",
   "ultraName": "🌟 降臨の天槍 (7x7爆弾排除&スタン)",
-  "ultraDesc": "自分中心7x7マスに警告後、1秒後に巨大な槍が落下。範囲内の爆弾を排除し敵を4秒スタン。",
+  "ultraDesc": "自分中心7x7マスに警告後、1秒後に巨大な槍が落下。範囲内の爆弾を排除し敵を3秒スタン。",
   "ultraCooldown": 0
 }

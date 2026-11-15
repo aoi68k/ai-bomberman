@@ -13,10 +13,10 @@
   },
   "skillType": "TACKLE",
   "skillName": "スタンタックル (Tackle)",
-  "skillDesc": "向いている方向へ2マス突進！当たった敵を3秒間スタンさせる",
+  "skillDesc": "向いている方向へ2マス突進！当たった敵を2秒間スタンさせる",
   "skillCooldown": 600,
   "ultraType": "ULTRA_METEOR_TACKLE",
   "ultraName": "メテオタックル (Meteor)",
-  "ultraDesc": "前方3マスへ猛突進！当たった敵を4秒間スタンさせる",
+  "ultraDesc": "前方3マスへ猛突進！当たった敵を3秒間スタンさせる",
   "ultraCooldown": 1200
 }

@@ -1337,7 +1337,7 @@ export class GameManager {
         this.stunEnemiesInArea(
           player.config.id,
           (other) => Math.abs(other.tileX - cx) <= 1 && Math.abs(other.tileY - cy) <= 1,
-          180,
+          120,
           '#f97316',
           10,
           280
@@ -1499,11 +1499,11 @@ export class GameManager {
             }
           }
 
-          // Stun all enemies within 7x7 area for 4 seconds (240 frames)
+          // Stun all enemies within 7x7 area for 3 seconds (180 frames)
           this.stunEnemiesInArea(
             strike.ownerId,
             (other) => Math.abs(other.tileX - strike.centerTx) <= 3 && Math.abs(other.tileY - strike.centerTy) <= 3,
-            240,
+            180,
             '#f472b6',
             0,
             280
@@ -1565,7 +1565,7 @@ export class GameManager {
       this.stunEnemiesInArea(
         player.config.id,
         (other) => other.tileX === player.tileX && other.tileY === player.tileY,
-        180,
+        120,
         '#f97316',
         6,
         200
@@ -1595,7 +1595,7 @@ export class GameManager {
       this.stunEnemiesInArea(
         player.config.id,
         (other) => other.tileX === player.tileX && other.tileY === player.tileY,
-        180,
+        120,
         '#ef4444',
         0,
         260
@@ -1609,8 +1609,8 @@ export class GameManager {
       wall.remainingFrames--;
       this.stunEnemiesInArea(
         wall.ownerId,
-        (other) => other.tileX === wall.tileX && other.tileY === wall.tileY && other.stunTimer < 165,
-        180,
+        (other) => other.tileX === wall.tileX && other.tileY === wall.tileY && other.stunTimer < 105,
+        120,
         '#f97316',
         0,
         200
@@ -1768,8 +1768,8 @@ export class GameManager {
         const dist = Math.hypot(other.x - player.x, other.y - player.y);
         if (dist < 36) {
           player.tackleHitEnemies.add(other.config.id);
-          const stunDuration = player.config.ultraType === 'ULTRA_METEOR_TACKLE' && player.tackleSpeed > 5.5 ? 240 : 180;
-          other.stun(stunDuration); // 3 seconds (or 4s for Meteor Tackle)
+          const stunDuration = player.config.ultraType === 'ULTRA_METEOR_TACKLE' && player.tackleSpeed > 5.5 ? 180 : 120;
+          other.stun(stunDuration); // 2 seconds (or 3s for Meteor Tackle)
           this.particles.addItemGetParticles(other.x, other.y, '#facc15');
           this.particles.addExplosionParticles(other.x, other.y, 8);
           this.particles.triggerShake(5, 12);
