@@ -64,6 +64,24 @@ export class GameRenderer {
     // 1. Draw Arena Floor (Single cached drawImage call)
     this.drawFloor(ctx);
 
+    // 1.5. Draw subtle landing floor glow for flying players
+    for (const p of players) {
+      if (p.isAlive && p.isFlying) {
+        const tx = Math.floor(p.flightTargetX / TILE_SIZE) * TILE_SIZE;
+        const ty = Math.floor(p.flightTargetY / TILE_SIZE) * TILE_SIZE;
+        const pulse = 0.55 + 0.45 * Math.sin(Date.now() / 70);
+        ctx.save();
+        ctx.globalAlpha = 0.28 * pulse;
+        ctx.fillStyle = '#22d3ee';
+        ctx.fillRect(tx + 3, ty + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+        ctx.globalAlpha = 0.65 * pulse;
+        ctx.strokeStyle = '#a5f3fc';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tx + 4, ty + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+        ctx.restore();
+      }
+    }
+
     // 2. Draw Soft Blocks, Walls, and Items on the ground
     this.drawItems(ctx, map);
     this.drawGridTiles(ctx, map);

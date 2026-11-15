@@ -1074,7 +1074,7 @@ export class GameManager {
         const landTx = player.tileX + dx * step;
         const landTy = player.tileY + dy * step;
         if (landTx < 1 || landTx >= 14 || landTy < 1 || landTy >= 12) return false;
-        if (!this.map.isWalkable(landTx, landTy) || this.bombManager.getBombAt(landTx, landTy)) {
+        if (!this.map.isWalkable(landTx, landTy)) {
           return false;
         }
 
@@ -1359,6 +1359,10 @@ export class GameManager {
       player.x = player.flightTargetX;
       player.y = player.flightTargetY;
       player.isFlying = false;
+      const landingBomb = this.bombManager.getBombAt(player.tileX, player.tileY);
+      if (landingBomb) {
+        landingBomb.passablePlayers.add(player.config.id);
+      }
       this.particles.addItemGetParticles(player.x, player.y, '#22d3ee');
     } else {
       const t = player.flightProgress;
@@ -1955,6 +1959,8 @@ export class GameManager {
         slashSequenceTimer: p.slashSequenceTimer,
         isFlying: p.isFlying,
         flightProgress: p.flightProgress,
+        flightTargetX: p.flightTargetX,
+        flightTargetY: p.flightTargetY,
       })),
       windSlashes: this.activeWindSlashes.map((ws) => ({
         ownerId: ws.ownerId,
@@ -2096,6 +2102,8 @@ export class GameManager {
         p.slashSequenceTimer = sp.slashSequenceTimer;
         p.isFlying = sp.isFlying ?? false;
         p.flightProgress = sp.flightProgress ?? 0;
+        p.flightTargetX = sp.flightTargetX ?? p.x;
+        p.flightTargetY = sp.flightTargetY ?? p.y;
       }
     }
 

@@ -40,6 +40,8 @@ export interface SerializedPlayer {
   slashSequenceTimer: number;
   isFlying?: boolean;
   flightProgress?: number;
+  flightTargetX?: number;
+  flightTargetY?: number;
 }
 
 export interface SerializedItem {
