@@ -95,6 +95,13 @@ export class GameManager {
     impactFrames: number;
   }> = [];
 
+  public activeSanctuaryZones: Array<{
+    ownerId: number;
+    centerTx: number;
+    centerTy: number;
+    remainingFrames: number;
+  }> = [];
+
   private isRunning: boolean = false;
   private animFrameId: number | null = null;
 
@@ -292,6 +299,7 @@ export class GameManager {
     this.activeWindSlashes = [];
     this.activeTempestZones = [];
     this.activeSpearStrikes = [];
+    this.activeSanctuaryZones = [];
 
     for (const p of this.players) {
       p.reset();
@@ -562,6 +570,7 @@ export class GameManager {
     this.updateWindSlashes();
     this.updateTempestZones();
     this.updateSpearStrikes();
+    this.updateSanctuaryZones();
 
     // 1. Human players (1P + any Online Remote Guests) input, movement, skill, and ultra
     const p1 = this.players.find((p) => p.config.id === 0 && p.config.isHuman);
@@ -703,7 +712,7 @@ export class GameManager {
 
     // 5. Check damage from explosions
     for (const p of this.players) {
-      if (!p.isAlive || p.isFlying) continue;
+      if (!p.isAlive || p.isFlying || this.isProtectedBySanctuary(p)) continue;
 
       if (this.bombManager.explosions.isCellDangerous(p.tileX, p.tileY)) {
         const isFatal = p.hit();
@@ -1089,6 +1098,37 @@ export class GameManager {
         }
         return true;
       }
+
+      case 'SHOREKEEPER_ERASE_BOMB': {
+        // Erase the bomb directly in front of Shorekeeper without detonating it
+        const dirs = {
+          up: { dx: 0, dy: -1 },
+          down: { dx: 0, dy: 1 },
+          left: { dx: -1, dy: 0 },
+          right: { dx: 1, dy: 0 },
+        };
+        const { dx, dy } = dirs[player.facing];
+        const targetTx = player.tileX + dx;
+        const targetTy = player.tileY + dy;
+        const bombIdx = this.bombManager.bombs.findIndex((b) => b.tileX === targetTx && b.tileY === targetTy);
+        if (bombIdx === -1) return false;
+
+        const targetBomb = this.bombManager.bombs[bombIdx];
+        this.bombManager.bombs.splice(bombIdx, 1);
+        const owner = this.players.find((p) => p.config.id === targetBomb.ownerId);
+        if (owner && owner.activeBombs > 0) {
+          owner.activeBombs--;
+        }
+
+        player.skillCooldownTimer = player.config.skillCooldown || 360;
+        sounds.playShieldBreak();
+        this.emitSound('shieldBreak');
+        this.particles.addItemGetParticles(targetBomb.pixelX, targetBomb.pixelY, '#60a5fa');
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 120, 0.45, 0.25);
+        }
+        return true;
+      }
     }
 
     return false;
@@ -1252,6 +1292,25 @@ export class GameManager {
         this.broadcastStats();
         return true;
       }
+
+      case 'SHOREKEEPER_SANCTUARY': {
+        // 5x5 sanctuary centered on Shorekeeper for 5 seconds (300 frames), protecting only Shorekeeper from blasts & enemy attacks
+        player.ultraGauge = 0;
+        this.activeSanctuaryZones.push({
+          ownerId: player.config.id,
+          centerTx: player.tileX,
+          centerTy: player.tileY,
+          remainingFrames: 300,
+        });
+        sounds.playShieldBreak();
+        this.emitSound('shieldBreak');
+        this.particles.addItemGetParticles(player.x, player.y, '#60a5fa');
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 200, 0.7, 0.4);
+        }
+        this.broadcastStats();
+        return true;
+      }
     }
 
     return false;
@@ -1287,7 +1346,12 @@ export class GameManager {
 
       // Hit check against opponents (2 seconds = 120 frames stun)
       for (const other of this.players) {
-        if (other.isAlive && other.config.id !== ws.ownerId && !ws.hitEnemies.has(other.config.id)) {
+        if (
+          other.isAlive &&
+          other.config.id !== ws.ownerId &&
+          !ws.hitEnemies.has(other.config.id) &&
+          !this.isProtectedBySanctuary(other)
+        ) {
           if (Math.hypot(other.x - ws.x, other.y - ws.y) < 34) {
             ws.hitEnemies.add(other.config.id);
             other.stun(120);
@@ -1331,7 +1395,7 @@ export class GameManager {
 
       // Stun any opponent inside the 3x3 zone for 2 seconds (120 frames)
       for (const other of this.players) {
-        if (other.isAlive && other.config.id !== zone.ownerId && other.stunTimer <= 0) {
+        if (other.isAlive && other.config.id !== zone.ownerId && other.stunTimer <= 0 && !this.isProtectedBySanctuary(other)) {
           if (Math.abs(other.x - centerPx) <= 72 && Math.abs(other.y - centerPy) <= 72) {
             other.stun(120);
             sounds.playKick();
@@ -1401,7 +1465,7 @@ export class GameManager {
 
           // Stun all enemies within 7x7 area for 4 seconds (240 frames)
           for (const other of this.players) {
-            if (other.isAlive && other.config.id !== strike.ownerId) {
+            if (other.isAlive && other.config.id !== strike.ownerId && !this.isProtectedBySanctuary(other)) {
               if (Math.abs(other.tileX - strike.centerTx) <= 3 && Math.abs(other.tileY - strike.centerTy) <= 3) {
                 other.stun(240);
                 this.particles.addItemGetParticles(other.x, other.y, '#f472b6');
@@ -1417,6 +1481,26 @@ export class GameManager {
         if (strike.impactFrames <= 0) {
           this.activeSpearStrikes.splice(i, 1);
         }
+      }
+    }
+  }
+
+  private isProtectedBySanctuary(player: Player): boolean {
+    if (this.activeSanctuaryZones.length === 0) return false;
+    return this.activeSanctuaryZones.some(
+      (z) =>
+        z.ownerId === player.config.id &&
+        Math.abs(player.tileX - z.centerTx) <= 2 &&
+        Math.abs(player.tileY - z.centerTy) <= 2
+    );
+  }
+
+  private updateSanctuaryZones() {
+    for (let i = this.activeSanctuaryZones.length - 1; i >= 0; i--) {
+      const zone = this.activeSanctuaryZones[i];
+      zone.remainingFrames--;
+      if (zone.remainingFrames <= 0) {
+        this.activeSanctuaryZones.splice(i, 1);
       }
     }
   }
@@ -1448,7 +1532,7 @@ export class GameManager {
     ];
 
     for (const other of this.players) {
-      if (other.isAlive && other.config.id !== player.config.id) {
+      if (other.isAlive && other.config.id !== player.config.id && !this.isProtectedBySanctuary(other)) {
         const hit = hitPoints.some((pt) => Math.hypot(other.x - pt.x, other.y - pt.y) < 36);
         if (hit) {
           other.stun(180); // 3 seconds stun
@@ -1544,7 +1628,12 @@ export class GameManager {
 
     // Check collision against opponents
     for (const other of this.players) {
-      if (other.isAlive && other.config.id !== player.config.id && !player.tackleHitEnemies.has(other.config.id)) {
+      if (
+        other.isAlive &&
+        other.config.id !== player.config.id &&
+        !player.tackleHitEnemies.has(other.config.id) &&
+        !this.isProtectedBySanctuary(other)
+      ) {
         const dist = Math.hypot(other.x - player.x, other.y - player.y);
         if (dist < 36) {
           player.tackleHitEnemies.add(other.config.id);
@@ -1691,6 +1780,7 @@ export class GameManager {
     this.drawWindSlashes(ctx);
     this.drawTempestZones(ctx);
     this.drawSpearStrikes(ctx);
+    this.drawSanctuaryZones(ctx);
 
     if (this.state === 'COUNTDOWN') {
       const count = Math.ceil(this.countdownTimer / 60);
@@ -1855,6 +1945,58 @@ export class GameManager {
     ctx.restore();
   }
 
+  private drawSanctuaryZones(ctx: CanvasRenderingContext2D) {
+    if (this.activeSanctuaryZones.length === 0) return;
+    const now = Date.now();
+    for (const zone of this.activeSanctuaryZones) {
+      const minTx = Math.max(1, zone.centerTx - 2);
+      const maxTx = Math.min(13, zone.centerTx + 2);
+      const minTy = Math.max(1, zone.centerTy - 2);
+      const maxTy = Math.min(11, zone.centerTy + 2);
+      const left = minTx * 48;
+      const top = minTy * 48;
+      const width = (maxTx - minTx + 1) * 48;
+      const height = (maxTy - minTy + 1) * 48;
+      const cx = zone.centerTx * 48 + 24;
+      const cy = zone.centerTy * 48 + 24;
+      const fade = Math.min(1, zone.remainingFrames / 30);
+      const pulse = 0.7 + 0.3 * Math.sin(now / 160);
+
+      ctx.save();
+      // Soft celestial blue sanctuary floor glow
+      ctx.globalAlpha = 0.18 * fade * pulse;
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(left, top, width, height);
+
+      // Inner radial sheen
+      const rad = ctx.createRadialGradient(cx, cy, 12, cx, cy, Math.max(width, height) * 0.6);
+      rad.addColorStop(0, 'rgba(224, 242, 254, 0.35)');
+      rad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = rad;
+      ctx.fillRect(left, top, width, height);
+
+      // Dashed luminous border
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.strokeStyle = '#bae6fd';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([10, 6]);
+      ctx.lineDashOffset = -(now / 35) % 16;
+      ctx.strokeRect(left + 1.5, top + 1.5, width - 3, height - 3);
+      ctx.setLineDash([]);
+
+      // Subtle star/diamond emblem at center
+      ctx.globalAlpha = 0.55 * fade * pulse;
+      ctx.strokeStyle = '#eff6ff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 20 + 3 * Math.sin(now / 200), 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
   private drawBigBanner(
     ctx: CanvasRenderingContext2D,
     mainText: string,
@@ -1972,6 +2114,7 @@ export class GameManager {
       })),
       tempestZones: this.activeTempestZones.map((tz) => ({ ...tz })),
       spearStrikes: this.activeSpearStrikes.map((ss) => ({ ...ss })),
+      sanctuaryZones: this.activeSanctuaryZones.map((sz) => ({ ...sz })),
       fxEvents: this.isOnlineHost ? this.particles.consumePendingFxEvents() : [],
       playerSlots: this.playerSlots.map((s) => ({ ...s })),
       itemSettings: { ...this.itemSettings },
@@ -2120,6 +2263,9 @@ export class GameManager {
     }
     if (snap.spearStrikes) {
       this.activeSpearStrikes = snap.spearStrikes.map((ss) => ({ ...ss }));
+    }
+    if (snap.sanctuaryZones) {
+      this.activeSanctuaryZones = snap.sanctuaryZones.map((sz) => ({ ...sz }));
     }
 
     if (snap.fxEvents && snap.fxEvents.length > 0) {

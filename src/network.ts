@@ -101,6 +101,13 @@ export interface SerializedSpearStrike {
   impactFrames: number;
 }
 
+export interface SerializedSanctuaryZone {
+  ownerId: number;
+  centerTx: number;
+  centerTy: number;
+  remainingFrames: number;
+}
+
 export type SerializedFxEvent =
   | { kind: 'itemGet'; x: number; y: number; color?: string }
   | { kind: 'explosion'; x: number; y: number; count?: number }
@@ -134,6 +141,7 @@ export interface GameSnapshot {
   windSlashes: SerializedWindSlash[];
   tempestZones: SerializedTempestZone[];
   spearStrikes?: SerializedSpearStrike[];
+  sanctuaryZones?: SerializedSanctuaryZone[];
   fxEvents?: SerializedFxEvent[];
   playerSlots?: PlayerSlotConfig[];
   itemSettings?: ItemSettings;

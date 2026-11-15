@@ -698,6 +698,16 @@ export class AIController {
         }
         return false;
       }
+
+      case 'SHOREKEEPER_SANCTUARY': {
+        const enemyNear4 = allPlayers.some(
+          (p) => p.isAlive && p.config.id !== this.player.config.id && Math.hypot(p.tileX - myTx, p.tileY - myTy) <= 4
+        );
+        if ((isCurrentTileDangerous && Math.random() < 0.85) || (enemyNear4 && Math.random() < 0.45)) {
+          return requestUseUltra(this.player);
+        }
+        return false;
+      }
     }
 
     return false;
@@ -838,6 +848,14 @@ export class AIController {
               return requestUseSkill(this.player);
             }
           }
+        }
+        return false;
+      }
+
+      case 'SHOREKEEPER_ERASE_BOMB': {
+        const frontBomb = bombManager.getBombAt(myTx + dx, myTy + dy);
+        if (frontBomb && (isCurrentTileDangerous || frontBomb.ownerId !== this.player.config.id || Math.random() < 0.35)) {
+          return requestUseSkill(this.player);
         }
         return false;
       }

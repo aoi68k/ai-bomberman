@@ -1,0 +1,22 @@
+{
+  "charId": "shorekeeper",
+  "name": "Shorekeeper",
+  "jpName": "ショアキーパー",
+  "role": "守護 / 聖域",
+  "color": "#3b82f6",
+  "subColor": "#eff6ff",
+  "accentColor": "#60a5fa",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "SHOREKEEPER_ERASE_BOMB",
+  "skillName": "🦋 星屑消去 (爆弾消滅)",
+  "skillDesc": "目の前1マスにある爆弾を爆発させずに消し去る。CT6秒。",
+  "skillCooldown": 360,
+  "ultraType": "SHOREKEEPER_SANCTUARY",
+  "ultraName": "🌟 終焉の聖域 (5x5無敵)",
+  "ultraDesc": "自分中心5x5マスの聖域を5秒間展開。聖域内の自分だけ爆風や敵の攻撃から護られる。",
+  "ultraCooldown": 0
+}
