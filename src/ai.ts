@@ -91,15 +91,7 @@ export class AIController {
     requestUseUltra?: (player: Player) => boolean,
     requestUseChainBomb?: (player: Player) => boolean
   ) {
-    if (
-      !this.player.isAlive ||
-      this.player.stunTimer > 0 ||
-      this.player.isTackling ||
-      this.player.slashSequenceTimer > 0 ||
-      this.player.isFlying ||
-      this.player.changliSkillTimer > 0 ||
-      this.player.changliUltraTimer > 0
-    ) {
+    if (!this.player.canAct) {
       return;
     }
 
@@ -739,7 +731,7 @@ export class AIController {
     requestUseSkill?: (player: Player) => boolean,
     requestUseChainBomb?: (player: Player) => boolean
   ): boolean {
-    const { dx, dy } = this.getFacingVector();
+    const { dx, dy } = this.player.getFacingVector();
 
     // Chain Bomb item ammo or CHAIN_BOMB character skill (requires standing on a placed bomb & available bomb capacity)
     if (this.player.chainBombAmmo > 0 || (this.player.config.skillType === 'CHAIN_BOMB' && this.player.skillCooldownTimer === 0)) {

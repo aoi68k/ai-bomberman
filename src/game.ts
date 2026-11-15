@@ -615,7 +615,7 @@ export class GameManager {
         (remote as any)._unconsumedDir = false;
       }
 
-      if (!hp.isTackling && hp.slashSequenceTimer <= 0 && !hp.isFlying && hp.changliSkillTimer <= 0 && hp.changliUltraTimer <= 0) {
+      if (!hp.isActionLocked) {
         hp.move(hInput.dx, hInput.dy, this.map, this.bombManager, () => {
           sounds.playKick();
           this.emitSound('kick');
@@ -793,7 +793,7 @@ export class GameManager {
   }
 
   private tryPlaceBomb(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
+    if (!player.canAct) return false;
     if (player.activeBombs >= player.maxBombs) return false;
 
     // Determine all players overlapping this tile right now
@@ -839,7 +839,7 @@ export class GameManager {
    * Executes Chain Bomb (連爆) skill: when standing on a placed bomb, places remaining available bombs in facing direction
    */
   public tryUseChainBomb(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
+    if (!player.canAct) return false;
     if (player.chainBombAmmo <= 0 && player.config.skillType !== 'CHAIN_BOMB') return false;
     if (player.config.skillType === 'CHAIN_BOMB' && player.chainBombAmmo <= 0 && player.skillCooldownTimer > 0) return false;
 
@@ -850,13 +850,7 @@ export class GameManager {
     const availableBombs = player.maxBombs - player.activeBombs;
     if (availableBombs <= 0) return false;
 
-    const dirs = {
-      up: { dx: 0, dy: -1 },
-      down: { dx: 0, dy: 1 },
-      left: { dx: -1, dy: 0 },
-      right: { dx: 1, dy: 0 },
-    };
-    const { dx, dy } = dirs[player.facing];
+    const { dx, dy } = player.getFacingVector();
 
     const targetTiles: Array<{ x: number; y: number }> = [];
 
@@ -919,140 +913,168 @@ export class GameManager {
     return true;
   }
 
+  private vibrateIfP1(playerId: number, durationMs: number, weak: number, strong: number) {
+    if (playerId === 0) {
+      this.input.vibrate(0, durationMs, weak, strong);
+    }
+  }
+
+  private removeBombAtIndex(index: number) {
+    const bomb = this.bombManager.bombs[index];
+    if (!bomb) return null;
+    this.bombManager.bombs.splice(index, 1);
+    const owner = this.players.find((p) => p.config.id === bomb.ownerId);
+    if (owner && owner.activeBombs > 0) {
+      owner.activeBombs--;
+    }
+    return bomb;
+  }
+
+  private applyStunHit(
+    target: Player,
+    stunFrames: number,
+    particleColor: string,
+    explosionParticles: number = 6,
+    vibrateMs: number = 220
+  ) {
+    target.stun(stunFrames);
+    this.particles.addItemGetParticles(target.x, target.y, particleColor);
+    if (explosionParticles > 0) {
+      this.particles.addExplosionParticles(target.x, target.y, explosionParticles);
+    }
+    this.vibrateIfP1(target.config.id, vibrateMs, 0.8, 0.45);
+  }
+
+  private stunEnemiesInArea(
+    ownerId: number,
+    predicate: (other: Player) => boolean,
+    stunFrames: number,
+    particleColor: string,
+    explosionParticles: number = 6,
+    vibrateMs: number = 220
+  ): number {
+    let hitCount = 0;
+    for (const other of this.players) {
+      if (other.isAlive && other.config.id !== ownerId && !this.isProtectedFromAttack(other) && predicate(other)) {
+        this.applyStunHit(other, stunFrames, particleColor, explosionParticles, vibrateMs);
+        hitCount++;
+      }
+    }
+    return hitCount;
+  }
+
+  private applyTeleportDash(player: Player, steps: number, invulnFrames: number, particleColor: string): boolean {
+    const { dx, dy } = player.getFacingVector();
+    const targetTx = Math.max(1, Math.min(13, player.tileX + dx * steps));
+    const targetTy = Math.max(1, Math.min(11, player.tileY + dy * steps));
+
+    if (!this.map.isWalkable(targetTx, targetTy) || this.bombManager.getBombAt(targetTx, targetTy)) {
+      return false;
+    }
+
+    this.particles.addItemGetParticles(player.x, player.y, particleColor);
+    player.x = targetTx * 48 + 24;
+    player.y = targetTy * 48 + 24;
+    if (invulnFrames > 0) {
+      player.invulnerableTimer = Math.max(player.invulnerableTimer, invulnFrames);
+    }
+    sounds.playKick();
+    this.emitSound('kick');
+    this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
+    this.vibrateIfP1(player.config.id, invulnFrames > 0 ? 150 : 100, 0.5, 0.25);
+    return true;
+  }
+
+  private getClampedTileBox(centerTx: number, centerTy: number, radius: number) {
+    const minTx = Math.max(1, centerTx - radius);
+    const maxTx = Math.min(13, centerTx + radius);
+    const minTy = Math.max(1, centerTy - radius);
+    const maxTy = Math.min(11, centerTy + radius);
+    return {
+      left: minTx * 48,
+      top: minTy * 48,
+      width: (maxTx - minTx + 1) * 48,
+      height: (maxTy - minTy + 1) * 48,
+      cx: centerTx * 48 + 24,
+      cy: centerTy * 48 + 24,
+    };
+  }
+
   /**
    * Executes unique character skill
    */
   public tryUseSkill(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0 || player.isFlying || player.changliSkillTimer > 0 || player.changliUltraTimer > 0) return false;
-    if (player.skillCooldownTimer > 0) return false;
+    if (!player.canAct || player.skillCooldownTimer > 0) return false;
 
     const skillType = player.config.skillType;
+    const { dx, dy } = player.getFacingVector();
 
     switch (skillType) {
       case 'CHAIN_BOMB': {
         return this.tryUseChainBomb(player);
       }
       case 'DASH': {
-        // Dash 2 tiles in current facing direction if not blocked
-        const dirs = {
-          up: { dx: 0, dy: -2 },
-          down: { dx: 0, dy: 2 },
-          left: { dx: -2, dy: 0 },
-          right: { dx: 2, dy: 0 },
-        };
-        const { dx, dy } = dirs[player.facing];
-        const targetTx = Math.max(1, Math.min(13, player.tileX + dx));
-        const targetTy = Math.max(1, Math.min(11, player.tileY + dy));
-
-        if (this.map.isWalkable(targetTx, targetTy) && !this.bombManager.getBombAt(targetTx, targetTy)) {
-          this.particles.addItemGetParticles(player.x, player.y, player.config.color);
-          player.x = targetTx * 48 + 24;
-          player.y = targetTy * 48 + 24;
-          player.skillCooldownTimer = player.config.skillCooldown;
-          sounds.playKick();
-          this.emitSound('kick');
-          this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
-          if (player.config.id === 0) this.input.vibrate(0, 100, 0.4, 0.2);
-          return true;
-        }
-        return false;
+        if (!this.applyTeleportDash(player, 2, 0, player.config.color)) return false;
+        player.skillCooldownTimer = player.config.skillCooldown;
+        return true;
       }
 
       case 'TACKLE': {
-        // Tackle forward up to 2 tiles at readable rush speed, stunning any opponent hit along the path for 3 seconds (180 frames)
-        const dirs = {
-          up: { dx: 0, dy: -1 },
-          down: { dx: 0, dy: 1 },
-          left: { dx: -1, dy: 0 },
-          right: { dx: 1, dy: 0 },
-        };
-        const { dx, dy } = dirs[player.facing];
-
-        // Check if cannot even move forward (facing wall or solid bomb right at hitbox)
         if (player.isColliding(player.x + dx * 16, player.y + dy * 16, this.map, this.bombManager)) {
           return false;
         }
-
-        // Start tackle charge: 2 tiles (96px) at speed 5.0 px/frame (~19 frames = ~0.32s)
         player.startTackle(dx, dy, 2 * 48, 5.0);
         player.skillCooldownTimer = player.config.skillCooldown;
         sounds.playKick();
         this.emitSound('kick');
         this.particles.addItemGetParticles(player.x, player.y, '#c084fc');
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 120, 0.5, 0.2);
-        }
+        this.vibrateIfP1(player.config.id, 120, 0.5, 0.2);
         return true;
       }
 
       case 'REMOTE_DETONATE': {
-        // Detonate the last placed bomb belonging to this player immediately
         const targetBomb = this.bombManager.bombs.find((b) => b.ownerId === player.config.id);
-        if (targetBomb) {
-          targetBomb.timer = 1; // Detonate next tick
-          player.skillCooldownTimer = player.config.skillCooldown;
-          sounds.playHurry();
-          this.emitSound('hurry');
-          this.particles.addItemGetParticles(targetBomb.pixelX, targetBomb.pixelY, '#ef4444');
-          if (player.config.id === 0) this.input.vibrate(0, 150, 0.6, 0.3);
-          return true;
-        }
-        return false;
+        if (!targetBomb) return false;
+        targetBomb.timer = 1;
+        player.skillCooldownTimer = player.config.skillCooldown;
+        sounds.playHurry();
+        this.emitSound('hurry');
+        this.particles.addItemGetParticles(targetBomb.pixelX, targetBomb.pixelY, '#ef4444');
+        this.vibrateIfP1(player.config.id, 150, 0.6, 0.3);
+        return true;
       }
 
       case 'MEGA_BOMB': {
-        // Empower next bomb
         player.hasMegaBomb = true;
         player.skillCooldownTimer = player.config.skillCooldown;
         sounds.playHurry();
         this.emitSound('hurry');
         this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
-        if (player.config.id === 0) this.input.vibrate(0, 150, 0.5, 0.3);
+        this.vibrateIfP1(player.config.id, 150, 0.5, 0.3);
         return true;
       }
 
       case 'SHIELD_DEPLOY': {
-        // Deploy emergency shield
         player.shield = Math.min(player.shield + 1, 2);
         player.skillCooldownTimer = player.config.skillCooldown;
         sounds.playShieldBreak();
         this.emitSound('shieldBreak');
         this.particles.addItemGetParticles(player.x, player.y, '#38bdf8');
-        if (player.config.id === 0) this.input.vibrate(0, 150, 0.5, 0.3);
+        this.vibrateIfP1(player.config.id, 150, 0.5, 0.3);
         return true;
       }
 
       case 'CHEN_SLASH_RUSH': {
-        // Phase 1: 2 slashes across 0..1 tiles forward, then Phase 2: rush forward up to 2 tiles while slashing
-        const dirs = {
-          up: { dx: 0, dy: -1 },
-          down: { dx: 0, dy: 1 },
-          left: { dx: -1, dy: 0 },
-          right: { dx: 1, dy: 0 },
-        };
-        const { dx, dy } = dirs[player.facing];
         player.slashSequenceTimer = 18;
         player.slashSeqDx = dx;
         player.slashSeqDy = dy;
         player.skillCooldownTimer = player.config.skillCooldown;
-
-        // 1st slash immediately (0..1 tiles forward)
         this.performSlashHit(player, dx, dy, false);
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 100, 0.5, 0.25);
-        }
+        this.vibrateIfP1(player.config.id, 100, 0.5, 0.25);
         return true;
       }
 
       case 'YANGYANG_WIND_SLASH': {
-        // Send a flurry of wind slashes 2 tiles forward; hits stun for 2 seconds (120 frames)
-        const dirs = {
-          up: { dx: 0, dy: -1 },
-          down: { dx: 0, dy: 1 },
-          left: { dx: -1, dy: 0 },
-          right: { dx: 1, dy: 0 },
-        };
-        const { dx, dy } = dirs[player.facing];
         player.skillCooldownTimer = player.config.skillCooldown;
         const startX = player.x + dx * 16;
         const startY = player.y + dy * 16;
@@ -1071,21 +1093,11 @@ export class GameManager {
         this.emitSound('kick');
         this.particles.addItemGetParticles(player.x, player.y, '#2dd4bf');
         this.particles.addSlashEffect(startX, startY, Math.atan2(dy, dx), 34, '#2dd4bf', false);
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 120, 0.5, 0.25);
-        }
+        this.vibrateIfP1(player.config.id, 120, 0.5, 0.25);
         return true;
       }
 
       case 'AEMEATH_FLIGHT': {
-        // Check forward in facing direction: must have at least 1 soft block and a walkable bomb-free landing space beyond consecutive soft blocks
-        const dirs = {
-          up: { dx: 0, dy: -1 },
-          down: { dx: 0, dy: 1 },
-          left: { dx: -1, dy: 0 },
-          right: { dx: 1, dy: 0 },
-        };
-        const { dx, dy } = dirs[player.facing];
         let step = 1;
         let softBlockCount = 0;
 
@@ -1106,9 +1118,7 @@ export class GameManager {
         const landTx = player.tileX + dx * step;
         const landTy = player.tileY + dy * step;
         if (landTx < 1 || landTx >= 14 || landTy < 1 || landTy >= 12) return false;
-        if (!this.map.isWalkable(landTx, landTy)) {
-          return false;
-        }
+        if (!this.map.isWalkable(landTx, landTy)) return false;
 
         const duration = Math.min(28, 14 + softBlockCount * 4);
         player.startFlight(landTx * 48 + 24, landTy * 48 + 24, duration);
@@ -1116,51 +1126,30 @@ export class GameManager {
         sounds.playKick();
         this.emitSound('kick');
         this.particles.addItemGetParticles(player.x, player.y, '#22d3ee');
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 100, 0.4, 0.2);
-        }
+        this.vibrateIfP1(player.config.id, 100, 0.4, 0.2);
         return true;
       }
 
       case 'SHOREKEEPER_ERASE_BOMB': {
-        // Erase the bomb directly in front of Shorekeeper without detonating it
-        const dirs = {
-          up: { dx: 0, dy: -1 },
-          down: { dx: 0, dy: 1 },
-          left: { dx: -1, dy: 0 },
-          right: { dx: 1, dy: 0 },
-        };
-        const { dx, dy } = dirs[player.facing];
         const targetTx = player.tileX + dx;
         const targetTy = player.tileY + dy;
         const bombIdx = this.bombManager.bombs.findIndex((b) => b.tileX === targetTx && b.tileY === targetTy);
         if (bombIdx === -1) return false;
 
-        const targetBomb = this.bombManager.bombs[bombIdx];
-        this.bombManager.bombs.splice(bombIdx, 1);
-        const owner = this.players.find((p) => p.config.id === targetBomb.ownerId);
-        if (owner && owner.activeBombs > 0) {
-          owner.activeBombs--;
-        }
-
+        const targetBomb = this.removeBombAtIndex(bombIdx)!;
         player.skillCooldownTimer = player.config.skillCooldown || 360;
         sounds.playShieldBreak();
         this.emitSound('shieldBreak');
         this.particles.addItemGetParticles(targetBomb.pixelX, targetBomb.pixelY, '#60a5fa');
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 120, 0.45, 0.25);
-        }
+        this.vibrateIfP1(player.config.id, 120, 0.45, 0.25);
         return true;
       }
 
       case 'CHANGLI_PHOENIX_ASCENT': {
-        // Ascend with 6 rapid slashes on own tile (3s stun), brief hover (blast immune), then slam down creating a Flame Wall
         player.changliSkillTimer = 66;
         player.skillCooldownTimer = player.config.skillCooldown || 360;
         this.particles.addItemGetParticles(player.x, player.y, '#f97316');
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 160, 0.55, 0.3);
-        }
+        this.vibrateIfP1(player.config.id, 160, 0.55, 0.3);
         return true;
       }
     }
@@ -1172,66 +1161,42 @@ export class GameManager {
    * Executes Ultra Skill
    */
   public tryUseUltra(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0 || player.isFlying || player.changliSkillTimer > 0 || player.changliUltraTimer > 0) return false;
-    if (player.ultraGauge < 10) return false;
+    if (!player.canAct || player.ultraGauge < 10) return false;
 
     const ultraType = player.config.ultraType;
-    const dirs = {
-      up: { dx: 0, dy: -1 },
-      down: { dx: 0, dy: 1 },
-      left: { dx: -1, dy: 0 },
-      right: { dx: 1, dy: 0 },
-    };
-    const { dx, dy } = dirs[player.facing];
+    const { dx, dy } = player.getFacingVector();
 
     switch (ultraType) {
       case 'CHEN_TEMPEST_RUSH': {
-        // Flurry of slashes while rushing forward 4 tiles (192px)
         player.ultraGauge = 0;
         player.startTackle(dx, dy, 4 * 48, 6.0, false, 'ultra_tempest');
         this.performSlashHit(player, dx, dy, false, true);
         this.particles.triggerShake(5, 16);
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 260, 0.8, 0.5);
-        }
+        this.vibrateIfP1(player.config.id, 260, 0.8, 0.5);
         this.broadcastStats();
         return true;
       }
 
       case 'ULTRA_BLITZ_DASH': {
-        const targetTx = Math.max(1, Math.min(13, player.tileX + dx * 3));
-        const targetTy = Math.max(1, Math.min(11, player.tileY + dy * 3));
-        if (this.map.isWalkable(targetTx, targetTy) && !this.bombManager.getBombAt(targetTx, targetTy)) {
-          this.particles.addItemGetParticles(player.x, player.y, '#38bdf8');
-          player.x = targetTx * 48 + 24;
-          player.y = targetTy * 48 + 24;
-          player.invulnerableTimer = Math.max(player.invulnerableTimer, 60);
-          player.ultraGauge = 0;
-          sounds.playKick();
-          this.emitSound('kick');
-          this.particles.addItemGetParticles(player.x, player.y, '#ffffff');
-          if (player.config.id === 0) this.input.vibrate(0, 150, 0.6, 0.3);
-          this.broadcastStats();
-          return true;
-        }
-        return false;
+        if (!this.applyTeleportDash(player, 3, 60, '#38bdf8')) return false;
+        player.ultraGauge = 0;
+        this.broadcastStats();
+        return true;
       }
 
       case 'ULTRA_ALL_DETONATE': {
         const myBombs = this.bombManager.bombs.filter((b) => b.ownerId === player.config.id);
-        if (myBombs.length > 0) {
-          for (const b of myBombs) {
-            b.timer = 1;
-            this.particles.addItemGetParticles(b.pixelX, b.pixelY, '#ef4444');
-          }
-          player.ultraGauge = 0;
-          sounds.playHurry();
-          this.emitSound('hurry');
-          if (player.config.id === 0) this.input.vibrate(0, 200, 0.7, 0.4);
-          this.broadcastStats();
-          return true;
+        if (myBombs.length === 0) return false;
+        for (const b of myBombs) {
+          b.timer = 1;
+          this.particles.addItemGetParticles(b.pixelX, b.pixelY, '#ef4444');
         }
-        return false;
+        player.ultraGauge = 0;
+        sounds.playHurry();
+        this.emitSound('hurry');
+        this.vibrateIfP1(player.config.id, 200, 0.7, 0.4);
+        this.broadcastStats();
+        return true;
       }
 
       case 'ULTRA_NOVA_BOMB': {
@@ -1240,20 +1205,18 @@ export class GameManager {
           .filter((p) => p.isAlive && Math.hypot(p.x - (player.tileX * 48 + 24), p.y - (player.tileY * 48 + 24)) < 36)
           .map((p) => p.config.id);
         const bomb = this.bombManager.placeBomb(player.config.id, player.tileX, player.tileY, 8, overlappingPlayers);
-        if (bomb) {
-          (bomb as any).isMega = true;
-          player.activeBombs++;
-          player.lastPlacedBombId = bomb.id;
-          player.ultraGauge = 0;
-          sounds.playHurry();
-          this.emitSound('hurry');
-          this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
-          this.particles.triggerShake(4, 10);
-          if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.4);
-          this.broadcastStats();
-          return true;
-        }
-        return false;
+        if (!bomb) return false;
+        (bomb as any).isMega = true;
+        player.activeBombs++;
+        player.lastPlacedBombId = bomb.id;
+        player.ultraGauge = 0;
+        sounds.playHurry();
+        this.emitSound('hurry');
+        this.particles.addItemGetParticles(player.x, player.y, '#f59e0b');
+        this.particles.triggerShake(4, 10);
+        this.vibrateIfP1(player.config.id, 180, 0.7, 0.4);
+        this.broadcastStats();
+        return true;
       }
 
       case 'ULTRA_FORTRESS': {
@@ -1263,7 +1226,7 @@ export class GameManager {
         sounds.playShieldBreak();
         this.emitSound('shieldBreak');
         this.particles.addItemGetParticles(player.x, player.y, '#10b981');
-        if (player.config.id === 0) this.input.vibrate(0, 180, 0.6, 0.3);
+        this.vibrateIfP1(player.config.id, 180, 0.6, 0.3);
         this.broadcastStats();
         return true;
       }
@@ -1277,13 +1240,12 @@ export class GameManager {
         sounds.playKick();
         this.emitSound('kick');
         this.particles.addItemGetParticles(player.x, player.y, '#a855f7');
-        if (player.config.id === 0) this.input.vibrate(0, 180, 0.7, 0.3);
+        this.vibrateIfP1(player.config.id, 180, 0.7, 0.3);
         this.broadcastStats();
         return true;
       }
 
       case 'YANGYANG_TEMPEST_ZONE': {
-        // Create a 3x3 tempest slash zone centered 1 tile in front of Yangyang for 4 seconds (240 frames)
         const centerTx = Math.max(1, Math.min(13, player.tileX + dx));
         const centerTy = Math.max(1, Math.min(11, player.tileY + dy));
         player.ultraGauge = 0;
@@ -1298,37 +1260,29 @@ export class GameManager {
         this.particles.triggerShake(5, 16);
         this.particles.addItemGetParticles(centerTx * 48 + 24, centerTy * 48 + 24, '#2dd4bf');
         this.particles.addSlashEffect(centerTx * 48 + 24, centerTy * 48 + 24, Math.atan2(dy, dx), 42, '#2dd4bf', false);
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 240, 0.8, 0.45);
-        }
+        this.vibrateIfP1(player.config.id, 240, 0.8, 0.45);
         this.broadcastStats();
         return true;
       }
 
       case 'AEMEATH_SPEAR_STRIKE': {
-        // 7x7 warning area centered on Aemeath; 1 second (60 frames) later a giant spear drops, removing bombs and stunning enemies for 4s (240 frames)
-        const centerTx = player.tileX;
-        const centerTy = player.tileY;
         player.ultraGauge = 0;
         this.activeSpearStrikes.push({
           ownerId: player.config.id,
-          centerTx,
-          centerTy,
+          centerTx: player.tileX,
+          centerTy: player.tileY,
           warningFrames: 60,
           impactFrames: 36,
         });
         sounds.playHurry();
         this.emitSound('hurry');
         this.particles.addItemGetParticles(player.x, player.y, '#f472b6');
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 160, 0.5, 0.3);
-        }
+        this.vibrateIfP1(player.config.id, 160, 0.5, 0.3);
         this.broadcastStats();
         return true;
       }
 
       case 'SHOREKEEPER_SANCTUARY': {
-        // 5x5 sanctuary centered on Shorekeeper for 5 seconds (300 frames), protecting only Shorekeeper from blasts & enemy attacks
         player.ultraGauge = 0;
         this.activeSanctuaryZones.push({
           ownerId: player.config.id,
@@ -1339,15 +1293,12 @@ export class GameManager {
         sounds.playShieldBreak();
         this.emitSound('shieldBreak');
         this.particles.addItemGetParticles(player.x, player.y, '#60a5fa');
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 200, 0.7, 0.4);
-        }
+        this.vibrateIfP1(player.config.id, 200, 0.7, 0.4);
         this.broadcastStats();
         return true;
       }
 
       case 'CHANGLI_PHOENIX_FLAME': {
-        // 3x3 Phoenix Flame centered on Changli: 3s stun to enemies, immediately detonates bombs in 3x3, blast-immune during ultra
         player.ultraGauge = 0;
         player.changliUltraTimer = 48;
         const cx = player.tileX;
@@ -1367,31 +1318,20 @@ export class GameManager {
           }
         }
 
-        // Stun all enemies within 3x3 area for 3 seconds (180 frames)
-        for (const other of this.players) {
-          if (
-            other.isAlive &&
-            other.config.id !== player.config.id &&
-            !this.isProtectedFromAttack(other) &&
-            Math.abs(other.tileX - cx) <= 1 &&
-            Math.abs(other.tileY - cy) <= 1
-          ) {
-            other.stun(180);
-            this.particles.addItemGetParticles(other.x, other.y, '#f97316');
-            this.particles.addExplosionParticles(other.x, other.y, 10);
-            if (other.config.id === 0) {
-              this.input.vibrate(0, 280, 0.85, 0.5);
-            }
-          }
-        }
+        this.stunEnemiesInArea(
+          player.config.id,
+          (other) => Math.abs(other.tileX - cx) <= 1 && Math.abs(other.tileY - cy) <= 1,
+          180,
+          '#f97316',
+          10,
+          280
+        );
 
         sounds.playExplosion();
         this.emitSound('explosion');
         this.particles.triggerShake(7, 16);
         this.particles.addExplosionParticles(player.x, player.y, 20);
-        if (player.config.id === 0) {
-          this.input.vibrate(0, 260, 0.85, 0.5);
-        }
+        this.vibrateIfP1(player.config.id, 260, 0.85, 0.5);
         this.broadcastStats();
         return true;
       }
@@ -1538,27 +1478,20 @@ export class GameManager {
           for (let bi = this.bombManager.bombs.length - 1; bi >= 0; bi--) {
             const b = this.bombManager.bombs[bi];
             if (Math.abs(b.tileX - strike.centerTx) <= 3 && Math.abs(b.tileY - strike.centerTy) <= 3) {
-              const owner = this.players.find((p) => p.config.id === b.ownerId);
-              if (owner && owner.activeBombs > 0) {
-                owner.activeBombs--;
-              }
               this.particles.addItemGetParticles(b.pixelX, b.pixelY, '#22d3ee');
-              this.bombManager.bombs.splice(bi, 1);
+              this.removeBombAtIndex(bi);
             }
           }
 
           // Stun all enemies within 7x7 area for 4 seconds (240 frames)
-          for (const other of this.players) {
-            if (other.isAlive && other.config.id !== strike.ownerId && !this.isProtectedFromAttack(other)) {
-              if (Math.abs(other.tileX - strike.centerTx) <= 3 && Math.abs(other.tileY - strike.centerTy) <= 3) {
-                other.stun(240);
-                this.particles.addItemGetParticles(other.x, other.y, '#f472b6');
-                if (other.config.id === 0) {
-                  this.input.vibrate(0, 280, 0.85, 0.5);
-                }
-              }
-            }
-          }
+          this.stunEnemiesInArea(
+            strike.ownerId,
+            (other) => Math.abs(other.tileX - strike.centerTx) <= 3 && Math.abs(other.tileY - strike.centerTy) <= 3,
+            240,
+            '#f472b6',
+            0,
+            280
+          );
         }
       } else {
         strike.impactFrames--;
@@ -1613,23 +1546,14 @@ export class GameManager {
       sounds.playKick();
       this.emitSound('kick');
 
-      // Ground hitbox on Changli's tile: stuns enemies on the same tile for 3s (180 frames)
-      for (const other of this.players) {
-        if (
-          other.isAlive &&
-          other.config.id !== player.config.id &&
-          !this.isProtectedFromAttack(other) &&
-          other.tileX === player.tileX &&
-          other.tileY === player.tileY
-        ) {
-          other.stun(180);
-          this.particles.addItemGetParticles(other.x, other.y, '#f97316');
-          this.particles.addExplosionParticles(other.x, other.y, 6);
-          if (other.config.id === 0) {
-            this.input.vibrate(0, 200, 0.7, 0.35);
-          }
-        }
-      }
+      this.stunEnemiesInArea(
+        player.config.id,
+        (other) => other.tileX === player.tileX && other.tileY === player.tileY,
+        180,
+        '#f97316',
+        6,
+        200
+      );
     }
 
     // Hover phase embers
@@ -1644,7 +1568,7 @@ export class GameManager {
         ownerId: player.config.id,
         tileX: player.tileX,
         tileY: player.tileY,
-        remainingFrames: 90, // 1.5s flame wall
+        remainingFrames: 90,
       });
       sounds.playExplosion();
       this.emitSound('explosion');
@@ -1652,21 +1576,14 @@ export class GameManager {
       this.particles.addExplosionParticles(player.x, player.y, 12);
       this.particles.addItemGetParticles(player.x, player.y, '#f97316');
 
-      for (const other of this.players) {
-        if (
-          other.isAlive &&
-          other.config.id !== player.config.id &&
-          !this.isProtectedFromAttack(other) &&
-          other.tileX === player.tileX &&
-          other.tileY === player.tileY
-        ) {
-          other.stun(180);
-          this.particles.addItemGetParticles(other.x, other.y, '#ef4444');
-          if (other.config.id === 0) {
-            this.input.vibrate(0, 260, 0.85, 0.45);
-          }
-        }
-      }
+      this.stunEnemiesInArea(
+        player.config.id,
+        (other) => other.tileX === player.tileX && other.tileY === player.tileY,
+        180,
+        '#ef4444',
+        0,
+        260
+      );
     }
   }
 
@@ -1674,23 +1591,14 @@ export class GameManager {
     for (let i = this.activeFlameWalls.length - 1; i >= 0; i--) {
       const wall = this.activeFlameWalls[i];
       wall.remainingFrames--;
-      for (const other of this.players) {
-        if (
-          other.isAlive &&
-          other.config.id !== wall.ownerId &&
-          !this.isProtectedFromAttack(other) &&
-          other.tileX === wall.tileX &&
-          other.tileY === wall.tileY
-        ) {
-          if (other.stunTimer < 165) {
-            other.stun(180);
-            this.particles.addItemGetParticles(other.x, other.y, '#f97316');
-            if (other.config.id === 0) {
-              this.input.vibrate(0, 200, 0.7, 0.35);
-            }
-          }
-        }
-      }
+      this.stunEnemiesInArea(
+        wall.ownerId,
+        (other) => other.tileX === wall.tileX && other.tileY === wall.tileY && other.stunTimer < 165,
+        180,
+        '#f97316',
+        0,
+        200
+      );
       if (wall.remainingFrames <= 0) {
         this.activeFlameWalls.splice(i, 1);
       }
@@ -1736,25 +1644,21 @@ export class GameManager {
     sounds.playKick();
     this.emitSound('kick');
 
-    // Hit check across 0..1 tiles forward (center at player and +1 tile forward)
     const hitPoints = [
       { x: player.x, y: player.y },
       { x: player.x + dx * 44, y: player.y + dy * 44 },
     ];
 
-    for (const other of this.players) {
-      if (other.isAlive && other.config.id !== player.config.id && !this.isProtectedFromAttack(other)) {
-        const hit = hitPoints.some((pt) => Math.hypot(other.x - pt.x, other.y - pt.y) < 36);
-        if (hit) {
-          other.stun(180); // 3 seconds stun
-          this.particles.addItemGetParticles(other.x, other.y, '#facc15');
-          this.particles.addExplosionParticles(other.x, other.y, 6);
-          this.particles.triggerShake(4, 10);
-          if (other.config.id === 0) {
-            this.input.vibrate(0, 260, 0.8, 0.4);
-          }
-        }
-      }
+    const hitCount = this.stunEnemiesInArea(
+      player.config.id,
+      (other) => hitPoints.some((pt) => Math.hypot(other.x - pt.x, other.y - pt.y) < 36),
+      180,
+      '#facc15',
+      6,
+      260
+    );
+    if (hitCount > 0) {
+      this.particles.triggerShake(4, 10);
     }
   }
 
@@ -2162,26 +2066,15 @@ export class GameManager {
     if (this.activeSanctuaryZones.length === 0) return;
     const now = Date.now();
     for (const zone of this.activeSanctuaryZones) {
-      const minTx = Math.max(1, zone.centerTx - 2);
-      const maxTx = Math.min(13, zone.centerTx + 2);
-      const minTy = Math.max(1, zone.centerTy - 2);
-      const maxTy = Math.min(11, zone.centerTy + 2);
-      const left = minTx * 48;
-      const top = minTy * 48;
-      const width = (maxTx - minTx + 1) * 48;
-      const height = (maxTy - minTy + 1) * 48;
-      const cx = zone.centerTx * 48 + 24;
-      const cy = zone.centerTy * 48 + 24;
+      const { left, top, width, height, cx, cy } = this.getClampedTileBox(zone.centerTx, zone.centerTy, 2);
       const fade = Math.min(1, zone.remainingFrames / 30);
       const pulse = 0.7 + 0.3 * Math.sin(now / 160);
 
       ctx.save();
-      // Soft celestial blue sanctuary floor glow
       ctx.globalAlpha = 0.18 * fade * pulse;
       ctx.fillStyle = '#38bdf8';
       ctx.fillRect(left, top, width, height);
 
-      // Inner radial sheen
       const rad = ctx.createRadialGradient(cx, cy, 12, cx, cy, Math.max(width, height) * 0.6);
       rad.addColorStop(0, 'rgba(224, 242, 254, 0.35)');
       rad.addColorStop(1, 'rgba(56, 189, 248, 0)');
@@ -2189,7 +2082,6 @@ export class GameManager {
       ctx.fillStyle = rad;
       ctx.fillRect(left, top, width, height);
 
-      // Dashed luminous border
       ctx.globalAlpha = 0.85 * fade;
       ctx.strokeStyle = '#bae6fd';
       ctx.lineWidth = 2.5;
@@ -2198,7 +2090,6 @@ export class GameManager {
       ctx.strokeRect(left + 1.5, top + 1.5, width - 3, height - 3);
       ctx.setLineDash([]);
 
-      // Subtle star/diamond emblem at center
       ctx.globalAlpha = 0.55 * fade * pulse;
       ctx.strokeStyle = '#eff6ff';
       ctx.lineWidth = 1.5;
@@ -2220,12 +2111,10 @@ export class GameManager {
       const flicker = 0.75 + 0.25 * Math.sin(now / 55 + wall.tileX);
 
       ctx.save();
-      // Base fiery tile glow
       ctx.globalAlpha = 0.42 * fade * flicker;
       ctx.fillStyle = '#f97316';
       ctx.fillRect(px + 2, py + 2, 44, 44);
 
-      // Rising flame wall tongues
       ctx.globalAlpha = 0.85 * fade;
       const cx = px + 24;
       const baseY = py + 42;
@@ -2256,16 +2145,7 @@ export class GameManager {
     if (this.activePhoenixFlames.length === 0) return;
     const now = Date.now();
     for (const flame of this.activePhoenixFlames) {
-      const minTx = Math.max(1, flame.centerTx - 1);
-      const maxTx = Math.min(13, flame.centerTx + 1);
-      const minTy = Math.max(1, flame.centerTy - 1);
-      const maxTy = Math.min(11, flame.centerTy + 1);
-      const left = minTx * 48;
-      const top = minTy * 48;
-      const width = (maxTx - minTx + 1) * 48;
-      const height = (maxTy - minTy + 1) * 48;
-      const cx = flame.centerTx * 48 + 24;
-      const cy = flame.centerTy * 48 + 24;
+      const { left, top, width, height, cx, cy } = this.getClampedTileBox(flame.centerTx, flame.centerTy, 1);
       const fade = Math.min(1, flame.remainingFrames / 16);
       const pulse = 0.75 + 0.25 * Math.sin(now / 60);
 

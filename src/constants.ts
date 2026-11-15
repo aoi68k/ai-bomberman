@@ -105,6 +105,15 @@ const bundledCharacterModules = import.meta.glob<{ default: CharacterInfo }>(
   { eager: true }
 );
 
+export type FacingDirection = 'up' | 'down' | 'left' | 'right';
+
+export const DIRECTION_VECTORS: Record<FacingDirection, { dx: number; dy: number }> = {
+  up: { dx: 0, dy: -1 },
+  down: { dx: 0, dy: 1 },
+  left: { dx: -1, dy: 0 },
+  right: { dx: 1, dy: 0 },
+};
+
 /**
  * Loads all character definitions from folders under characters/ that contain character.json
  */
@@ -113,7 +122,18 @@ export async function loadCharacters(): Promise<void> {
     delete CHARACTERS[key];
   }
 
-  const preferredOrder = ['bomber_blue', 'bomber_black', 'bomber_red', 'bomber_green', 'bomber_purple', 'chen', 'yangyang'];
+  const preferredOrder = [
+    'bomber_blue',
+    'bomber_black',
+    'bomber_red',
+    'bomber_green',
+    'bomber_purple',
+    'chen',
+    'yangyang',
+    'aemeath',
+    'shorekeeper',
+    'changli',
+  ];
   const entries: CharacterInfo[] = [];
 
   await Promise.all(

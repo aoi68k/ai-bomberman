@@ -14,6 +14,7 @@ import {
   ITEM,
   ItemType,
   PlayerConfig,
+  DIRECTION_VECTORS,
 } from './constants';
 import { GameMap } from './map';
 import { BombManager, Bomb } from './bomb';
@@ -77,6 +78,24 @@ export class Player {
   public animFrame: number = 0;
   public isMoving: boolean = false;
   public invulnerableTimer: number = 0;
+
+  public get isActionLocked(): boolean {
+    return (
+      this.isTackling ||
+      this.slashSequenceTimer > 0 ||
+      this.isFlying ||
+      this.changliSkillTimer > 0 ||
+      this.changliUltraTimer > 0
+    );
+  }
+
+  public get canAct(): boolean {
+    return this.isAlive && this.stunTimer <= 0 && !this.isActionLocked;
+  }
+
+  public getFacingVector(): { dx: number; dy: number } {
+    return DIRECTION_VECTORS[this.facing];
+  }
 
   public get isChangliAscending(): boolean {
     return this.changliSkillTimer > 30;
