@@ -1103,53 +1103,38 @@ export class GameManager {
         let softBlockCount = 0;
 
         // Skip any empty tiles in front of Aemeath until hitting a soft block, wall, or border
-        let blocked = false;
         while (true) {
           const tx = player.tileX + dx * step;
           const ty = player.tileY + dy * step;
-          if (tx < 1 || tx >= 14 || ty < 1 || ty >= 12) {
-            blocked = true;
-            break;
-          }
+          if (tx < 1 || tx >= 14 || ty < 1 || ty >= 12) return false;
           const tile = this.map.getTile(tx, ty);
           if (tile === TILE.EMPTY) {
             step++;
           } else if (tile === TILE.SOFT_BLOCK) {
             break;
           } else {
-            blocked = true;
+            return false;
+          }
+        }
+
+        while (true) {
+          const tx = player.tileX + dx * step;
+          const ty = player.tileY + dy * step;
+          if (tx < 1 || tx >= 14 || ty < 1 || ty >= 12) break;
+          if (this.map.getTile(tx, ty) === TILE.SOFT_BLOCK) {
+            softBlockCount++;
+            step++;
+          } else {
             break;
           }
         }
 
-        if (!blocked) {
-          while (true) {
-            const tx = player.tileX + dx * step;
-            const ty = player.tileY + dy * step;
-            if (tx < 1 || tx >= 14 || ty < 1 || ty >= 12) break;
-            if (this.map.getTile(tx, ty) === TILE.SOFT_BLOCK) {
-              softBlockCount++;
-              step++;
-            } else {
-              break;
-            }
-          }
-        }
+        if (softBlockCount === 0) return false;
 
         const landTx = player.tileX + dx * step;
         const landTy = player.tileY + dy * step;
-        if (
-          blocked ||
-          softBlockCount === 0 ||
-          landTx < 1 ||
-          landTx >= 14 ||
-          landTy < 1 ||
-          landTy >= 12 ||
-          !this.map.isWalkable(landTx, landTy)
-        ) {
-          this.particles.addItemGetParticles(player.x + dx * 20, player.y + dy * 20, '#94a3b8');
-          return false;
-        }
+        if (landTx < 1 || landTx >= 14 || landTy < 1 || landTy >= 12) return false;
+        if (!this.map.isWalkable(landTx, landTy)) return false;
 
         const duration = Math.min(36, 12 + step * 3);
         player.startFlight(landTx * 48 + 24, landTy * 48 + 24, duration);
