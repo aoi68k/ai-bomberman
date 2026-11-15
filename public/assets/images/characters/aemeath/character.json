@@ -1,0 +1,22 @@
+{
+  "charId": "aemeath",
+  "name": "Aemeath",
+  "jpName": "エイメス",
+  "role": "飛行 / 天槍",
+  "color": "#f472b6",
+  "subColor": "#fdf2f8",
+  "accentColor": "#22d3ee",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.7
+  },
+  "skillType": "AEMEATH_FLIGHT",
+  "skillName": "🕊️ 天翔 (ブロック越え)",
+  "skillDesc": "前方の壊せるブロック（複数可）を飛び越えて着地する。CT5秒・ダメージなし。",
+  "skillCooldown": 300,
+  "ultraType": "AEMEATH_SPEAR_STRIKE",
+  "ultraName": "🌟 降臨の天槍 (7x7爆弾排除&スタン)",
+  "ultraDesc": "自分中心7x7マスに警告後、1秒後に巨大な槍が落下。範囲内の爆弾を排除し敵を4秒スタン。",
+  "ultraCooldown": 0
+}

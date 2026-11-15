@@ -87,6 +87,14 @@ export class GameManager {
     remainingFrames: number;
   }> = [];
 
+  public activeSpearStrikes: Array<{
+    ownerId: number;
+    centerTx: number;
+    centerTy: number;
+    warningFrames: number;
+    impactFrames: number;
+  }> = [];
+
   private isRunning: boolean = false;
   private animFrameId: number | null = null;
 
@@ -283,6 +291,7 @@ export class GameManager {
     this.suddenDeathPath = this.generateSpiralPath();
     this.activeWindSlashes = [];
     this.activeTempestZones = [];
+    this.activeSpearStrikes = [];
 
     for (const p of this.players) {
       p.reset();
@@ -537,19 +546,22 @@ export class GameManager {
       }
     }
 
-    // Update active tackles and slash sequences (Bomber Purple & Chen)
+    // Update active tackles, slash sequences, and flights
     for (const p of this.players) {
       if (!p.isAlive) continue;
-      if (p.slashSequenceTimer > 0) {
+      if (p.isFlying) {
+        this.updatePlayerFlight(p);
+      } else if (p.slashSequenceTimer > 0) {
         this.updateChenSlashSequence(p);
       } else if (p.isTackling) {
         this.updatePlayerTackle(p);
       }
     }
 
-    // Update Yangyang's wind slashes and 3x3 tempest zones
+    // Update Yangyang's wind slashes, 3x3 tempest zones, and Aemeath's spear strikes
     this.updateWindSlashes();
     this.updateTempestZones();
+    this.updateSpearStrikes();
 
     // 1. Human players (1P + any Online Remote Guests) input, movement, skill, and ultra
     const p1 = this.players.find((p) => p.config.id === 0 && p.config.isHuman);
@@ -571,7 +583,7 @@ export class GameManager {
         (remote as any)._unconsumedDir = false;
       }
 
-      if (!hp.isTackling && hp.slashSequenceTimer <= 0) {
+      if (!hp.isTackling && hp.slashSequenceTimer <= 0 && !hp.isFlying) {
         hp.move(hInput.dx, hInput.dy, this.map, this.bombManager, () => {
           sounds.playKick();
           this.emitSound('kick');
@@ -691,7 +703,7 @@ export class GameManager {
 
     // 5. Check damage from explosions
     for (const p of this.players) {
-      if (!p.isAlive) continue;
+      if (!p.isAlive || p.isFlying) continue;
 
       if (this.bombManager.explosions.isCellDangerous(p.tileX, p.tileY)) {
         const isFatal = p.hit();
@@ -1032,6 +1044,51 @@ export class GameManager {
         }
         return true;
       }
+
+      case 'AEMEATH_FLIGHT': {
+        // Check forward in facing direction: must have at least 1 soft block and a walkable bomb-free landing space beyond consecutive soft blocks
+        const dirs = {
+          up: { dx: 0, dy: -1 },
+          down: { dx: 0, dy: 1 },
+          left: { dx: -1, dy: 0 },
+          right: { dx: 1, dy: 0 },
+        };
+        const { dx, dy } = dirs[player.facing];
+        let step = 1;
+        let softBlockCount = 0;
+
+        while (true) {
+          const tx = player.tileX + dx * step;
+          const ty = player.tileY + dy * step;
+          if (tx < 1 || tx >= 14 || ty < 1 || ty >= 12) break;
+          if (this.map.getTile(tx, ty) === TILE.SOFT_BLOCK) {
+            softBlockCount++;
+            step++;
+          } else {
+            break;
+          }
+        }
+
+        if (softBlockCount === 0) return false;
+
+        const landTx = player.tileX + dx * step;
+        const landTy = player.tileY + dy * step;
+        if (landTx < 1 || landTx >= 14 || landTy < 1 || landTy >= 12) return false;
+        if (!this.map.isWalkable(landTx, landTy) || this.bombManager.getBombAt(landTx, landTy)) {
+          return false;
+        }
+
+        const duration = Math.min(28, 14 + softBlockCount * 4);
+        player.startFlight(landTx * 48 + 24, landTy * 48 + 24, duration);
+        player.skillCooldownTimer = player.config.skillCooldown || 300;
+        sounds.playKick();
+        this.emitSound('kick');
+        this.particles.addItemGetParticles(player.x, player.y, '#22d3ee');
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 100, 0.4, 0.2);
+        }
+        return true;
+      }
     }
 
     return false;
@@ -1041,7 +1098,7 @@ export class GameManager {
    * Executes Ultra Skill
    */
   public tryUseUltra(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0 || player.isFlying) return false;
     if (player.ultraGauge < 10) return false;
 
     const ultraType = player.config.ultraType;
@@ -1173,6 +1230,28 @@ export class GameManager {
         this.broadcastStats();
         return true;
       }
+
+      case 'AEMEATH_SPEAR_STRIKE': {
+        // 7x7 warning area centered on Aemeath; 1 second (60 frames) later a giant spear drops, removing bombs and stunning enemies for 4s (240 frames)
+        const centerTx = player.tileX;
+        const centerTy = player.tileY;
+        player.ultraGauge = 0;
+        this.activeSpearStrikes.push({
+          ownerId: player.config.id,
+          centerTx,
+          centerTy,
+          warningFrames: 60,
+          impactFrames: 36,
+        });
+        sounds.playHurry();
+        this.emitSound('hurry');
+        this.particles.addItemGetParticles(player.x, player.y, '#f472b6');
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 160, 0.5, 0.3);
+        }
+        this.broadcastStats();
+        return true;
+      }
     }
 
     return false;
@@ -1268,6 +1347,72 @@ export class GameManager {
 
       if (zone.remainingFrames <= 0) {
         this.activeTempestZones.splice(i, 1);
+      }
+    }
+  }
+
+  private updatePlayerFlight(player: Player) {
+    if (!player.isFlying) return;
+    player.flightProgress += 1 / player.flightDuration;
+    if (player.flightProgress >= 1) {
+      player.flightProgress = 1;
+      player.x = player.flightTargetX;
+      player.y = player.flightTargetY;
+      player.isFlying = false;
+      this.particles.addItemGetParticles(player.x, player.y, '#22d3ee');
+    } else {
+      const t = player.flightProgress;
+      player.x = player.flightStartX + (player.flightTargetX - player.flightStartX) * t;
+      player.y = player.flightStartY + (player.flightTargetY - player.flightStartY) * t;
+    }
+  }
+
+  private updateSpearStrikes() {
+    for (let i = this.activeSpearStrikes.length - 1; i >= 0; i--) {
+      const strike = this.activeSpearStrikes[i];
+      if (strike.warningFrames > 0) {
+        strike.warningFrames--;
+        if (strike.warningFrames === 0) {
+          // Spear impacts!
+          const cx = strike.centerTx * 48 + 24;
+          const cy = strike.centerTy * 48 + 24;
+          sounds.playExplosion();
+          this.emitSound('explosion');
+          this.particles.triggerShake(9, 20);
+          this.particles.addExplosionParticles(cx, cy, 24);
+          this.particles.addItemGetParticles(cx, cy, '#22d3ee');
+
+          // Remove all bombs within 7x7 area (without detonating them)
+          for (let bi = this.bombManager.bombs.length - 1; bi >= 0; bi--) {
+            const b = this.bombManager.bombs[bi];
+            if (Math.abs(b.tileX - strike.centerTx) <= 3 && Math.abs(b.tileY - strike.centerTy) <= 3) {
+              const owner = this.players.find((p) => p.config.id === b.ownerId);
+              if (owner && owner.activeBombs > 0) {
+                owner.activeBombs--;
+              }
+              this.particles.addItemGetParticles(b.pixelX, b.pixelY, '#22d3ee');
+              this.bombManager.bombs.splice(bi, 1);
+            }
+          }
+
+          // Stun all enemies within 7x7 area for 4 seconds (240 frames)
+          for (const other of this.players) {
+            if (other.isAlive && other.config.id !== strike.ownerId) {
+              if (Math.abs(other.tileX - strike.centerTx) <= 3 && Math.abs(other.tileY - strike.centerTy) <= 3) {
+                other.stun(240);
+                this.particles.addItemGetParticles(other.x, other.y, '#f472b6');
+                if (other.config.id === 0) {
+                  this.input.vibrate(0, 280, 0.85, 0.5);
+                }
+              }
+            }
+          }
+        }
+      } else {
+        strike.impactFrames--;
+        if (strike.impactFrames <= 0) {
+          this.activeSpearStrikes.splice(i, 1);
+        }
       }
     }
   }
@@ -1541,6 +1686,7 @@ export class GameManager {
     const ctx = this.canvas.getContext('2d')!;
     this.drawWindSlashes(ctx);
     this.drawTempestZones(ctx);
+    this.drawSpearStrikes(ctx);
 
     if (this.state === 'COUNTDOWN') {
       const count = Math.ceil(this.countdownTimer / 60);
@@ -1609,6 +1755,100 @@ export class GameManager {
       ctx.strokeRect(left + 1, top + 1, size - 2, size - 2);
       ctx.restore();
     }
+  }
+
+  private drawSpearStrikes(ctx: CanvasRenderingContext2D) {
+    if (this.activeSpearStrikes.length === 0) return;
+    const now = Date.now();
+    for (const strike of this.activeSpearStrikes) {
+      const minTx = Math.max(1, strike.centerTx - 3);
+      const maxTx = Math.min(13, strike.centerTx + 3);
+      const minTy = Math.max(1, strike.centerTy - 3);
+      const maxTy = Math.min(11, strike.centerTy + 3);
+      const left = minTx * 48;
+      const top = minTy * 48;
+      const width = (maxTx - minTx + 1) * 48;
+      const height = (maxTy - minTy + 1) * 48;
+      const cx = strike.centerTx * 48 + 24;
+      const cy = strike.centerTy * 48 + 24;
+
+      ctx.save();
+      if (strike.warningFrames > 0) {
+        const t = 1 - strike.warningFrames / 60; // 0 -> 1 over 1 second
+        const pulse = 0.55 + 0.45 * Math.sin(now / 65);
+        ctx.globalAlpha = (0.14 + t * 0.2) * pulse;
+        ctx.fillStyle = '#f43f5e';
+        ctx.fillRect(left, top, width, height);
+
+        ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = '#fda4af';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([10, 6]);
+        ctx.lineDashOffset = -(now / 25) % 16;
+        ctx.strokeRect(left + 1, top + 1, width - 2, height - 2);
+        ctx.setLineDash([]);
+
+        // Target reticle & shrinking lock-on ring at center
+        const ringRadius = 18 + (1 - t) * 44;
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Falling spear shadow preview
+        if (t > 0.65) {
+          const dropT = (t - 0.65) / 0.35; // 0 -> 1 in last 0.35s
+          const spearTipY = cy - (1 - dropT) * 260;
+          this.drawGiantSpear(ctx, cx, spearTipY, 0.9);
+        }
+      } else {
+        const fade = Math.min(1, strike.impactFrames / 18);
+        // Shockwave ring across 7x7
+        const waveProgress = 1 - strike.impactFrames / 36;
+        ctx.globalAlpha = fade * 0.45;
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 5 * fade;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 24 + waveProgress * 150, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Impacted giant spear
+        this.drawGiantSpear(ctx, cx, cy, fade);
+      }
+      ctx.restore();
+    }
+  }
+
+  private drawGiantSpear(ctx: CanvasRenderingContext2D, tipX: number, tipY: number, alpha: number) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    // Glowing cyan/pink spear shaft & blade pointing down at (tipX, tipY)
+    ctx.fillStyle = '#e0f2fe';
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth = 2;
+
+    // Blade
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - 18, tipY - 46);
+    ctx.lineTo(tipX, tipY - 34);
+    ctx.lineTo(tipX + 18, tipY - 46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Crossguard
+    ctx.fillStyle = '#f472b6';
+    ctx.fillRect(tipX - 22, tipY - 52, 44, 7);
+
+    // Shaft extending upward
+    const grad = ctx.createLinearGradient(tipX - 6, tipY - 52, tipX + 6, tipY - 220);
+    grad.addColorStop(0, '#38bdf8');
+    grad.addColorStop(1, 'rgba(244, 114, 182, 0.15)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(tipX - 5, tipY - 220, 10, 168);
+    ctx.restore();
   }
 
   private drawBigBanner(
@@ -1713,6 +1953,8 @@ export class GameManager {
         tackleSlashMode: p.tackleSlashMode,
         tackleSlashTick: p.tackleSlashTick,
         slashSequenceTimer: p.slashSequenceTimer,
+        isFlying: p.isFlying,
+        flightProgress: p.flightProgress,
       })),
       windSlashes: this.activeWindSlashes.map((ws) => ({
         ownerId: ws.ownerId,
@@ -1723,6 +1965,7 @@ export class GameManager {
         tick: ws.tick,
       })),
       tempestZones: this.activeTempestZones.map((tz) => ({ ...tz })),
+      spearStrikes: this.activeSpearStrikes.map((ss) => ({ ...ss })),
       fxEvents: this.isOnlineHost ? this.particles.consumePendingFxEvents() : [],
       playerSlots: this.playerSlots.map((s) => ({ ...s })),
       itemSettings: { ...this.itemSettings },
@@ -1851,6 +2094,8 @@ export class GameManager {
         p.tackleSlashMode = sp.tackleSlashMode;
         p.tackleSlashTick = sp.tackleSlashTick;
         p.slashSequenceTimer = sp.slashSequenceTimer;
+        p.isFlying = sp.isFlying ?? false;
+        p.flightProgress = sp.flightProgress ?? 0;
       }
     }
 
@@ -1864,6 +2109,9 @@ export class GameManager {
     }
     if (snap.tempestZones) {
       this.activeTempestZones = snap.tempestZones.map((tz) => ({ ...tz }));
+    }
+    if (snap.spearStrikes) {
+      this.activeSpearStrikes = snap.spearStrikes.map((ss) => ({ ...ss }));
     }
 
     if (snap.fxEvents && snap.fxEvents.length > 0) {

@@ -38,6 +38,8 @@ export interface SerializedPlayer {
   tackleSlashMode: 'none' | 'skill_rush' | 'ultra_tempest';
   tackleSlashTick: number;
   slashSequenceTimer: number;
+  isFlying?: boolean;
+  flightProgress?: number;
 }
 
 export interface SerializedItem {
@@ -89,6 +91,14 @@ export interface SerializedTempestZone {
   remainingFrames: number;
 }
 
+export interface SerializedSpearStrike {
+  ownerId: number;
+  centerTx: number;
+  centerTy: number;
+  warningFrames: number;
+  impactFrames: number;
+}
+
 export type SerializedFxEvent =
   | { kind: 'itemGet'; x: number; y: number; color?: string }
   | { kind: 'explosion'; x: number; y: number; count?: number }
@@ -121,6 +131,7 @@ export interface GameSnapshot {
   players: SerializedPlayer[];
   windSlashes: SerializedWindSlash[];
   tempestZones: SerializedTempestZone[];
+  spearStrikes?: SerializedSpearStrike[];
   fxEvents?: SerializedFxEvent[];
   playerSlots?: PlayerSlotConfig[];
   itemSettings?: ItemSettings;

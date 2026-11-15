@@ -56,6 +56,15 @@ export class Player {
   public slashSeqDx: number = 0;
   public slashSeqDy: number = 0;
 
+  // Aemeath's flight over soft blocks
+  public isFlying: boolean = false;
+  public flightStartX: number = 0;
+  public flightStartY: number = 0;
+  public flightTargetX: number = 0;
+  public flightTargetY: number = 0;
+  public flightProgress: number = 0;
+  public flightDuration: number = 20;
+
   public isAlive: boolean = true;
   public deathTimer: number = 0; // For death spin animation
   public stunTimer: number = 0; // Stun duration in frames (stars over head, cannot act)
@@ -101,6 +110,13 @@ export class Player {
     this.slashSequenceTimer = 0;
     this.slashSeqDx = 0;
     this.slashSeqDy = 0;
+    this.isFlying = false;
+    this.flightStartX = 0;
+    this.flightStartY = 0;
+    this.flightTargetX = 0;
+    this.flightTargetY = 0;
+    this.flightProgress = 0;
+    this.flightDuration = 20;
     this.isAlive = true;
     this.deathTimer = 0;
     this.stunTimer = 0;
@@ -108,6 +124,16 @@ export class Player {
     this.animFrame = 0;
     this.isMoving = false;
     this.invulnerableTimer = 0;
+  }
+
+  public startFlight(targetX: number, targetY: number, duration: number) {
+    this.isFlying = true;
+    this.flightStartX = this.x;
+    this.flightStartY = this.y;
+    this.flightTargetX = targetX;
+    this.flightTargetY = targetY;
+    this.flightProgress = 0;
+    this.flightDuration = Math.max(10, duration);
   }
 
   public get tileX(): number {

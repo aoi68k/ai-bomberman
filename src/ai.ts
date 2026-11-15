@@ -91,7 +91,13 @@ export class AIController {
     requestUseUltra?: (player: Player) => boolean,
     requestUseChainBomb?: (player: Player) => boolean
   ) {
-    if (!this.player.isAlive || this.player.stunTimer > 0 || this.player.isTackling || this.player.slashSequenceTimer > 0) {
+    if (
+      !this.player.isAlive ||
+      this.player.stunTimer > 0 ||
+      this.player.isTackling ||
+      this.player.slashSequenceTimer > 0 ||
+      this.player.isFlying
+    ) {
       return;
     }
 
@@ -679,6 +685,19 @@ export class AIController {
         }
         return false;
       }
+
+      case 'AEMEATH_SPEAR_STRIKE': {
+        const enemyIn7x7 = allPlayers.some(
+          (p) => p.isAlive && p.config.id !== this.player.config.id && Math.abs(p.tileX - myTx) <= 3 && Math.abs(p.tileY - myTy) <= 3
+        );
+        const bombsIn7x7 = bombManager.bombs.filter(
+          (b) => Math.abs(b.tileX - myTx) <= 3 && Math.abs(b.tileY - myTy) <= 3
+        ).length;
+        if ((enemyIn7x7 && Math.random() < 0.6) || (bombsIn7x7 >= 2 && Math.random() < 0.5)) {
+          return requestUseUltra(this.player);
+        }
+        return false;
+      }
     }
 
     return false;
@@ -785,6 +804,40 @@ export class AIController {
       case 'YANGYANG_WIND_SLASH': {
         if (this.hasEnemyInFront(myTx, myTy, 3, allPlayers, map) && Math.random() < 0.5) {
           return requestUseSkill(this.player);
+        }
+        return false;
+      }
+
+      case 'AEMEATH_FLIGHT': {
+        let step = 1;
+        let softCount = 0;
+        while (true) {
+          const tx = myTx + dx * step;
+          const ty = myTy + dy * step;
+          if (tx < 1 || tx >= COLS - 1 || ty < 1 || ty >= ROWS - 1) break;
+          if (map.getTile(tx, ty) === TILE.SOFT_BLOCK) {
+            softCount++;
+            step++;
+          } else {
+            break;
+          }
+        }
+        if (softCount > 0) {
+          const landTx = myTx + dx * step;
+          const landTy = myTy + dy * step;
+          if (
+            landTx >= 1 &&
+            landTx < COLS - 1 &&
+            landTy >= 1 &&
+            landTy < ROWS - 1 &&
+            map.isWalkable(landTx, landTy) &&
+            !bombManager.getBombAt(landTx, landTy) &&
+            dangerMap[landTy][landTx] === 0
+          ) {
+            if (isCurrentTileDangerous || Math.random() < 0.35) {
+              return requestUseSkill(this.player);
+            }
+          }
         }
         return false;
       }

@@ -514,14 +514,17 @@ export class GameRenderer {
       ctx.rotate(Math.sin(Date.now() / 90) * 0.12);
     }
 
+    const flightLift = p.isFlying ? Math.sin(p.flightProgress * Math.PI) * 34 : 0;
+
     // Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillStyle = p.isFlying ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
-    ctx.ellipse(0, 16, 14, 6, 0, 0, Math.PI * 2);
+    const shadowScale = p.isFlying ? Math.max(0.55, 1 - Math.sin(p.flightProgress * Math.PI) * 0.45) : 1;
+    ctx.ellipse(0, 16, 14 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Walking leg bobbing
-    const walkBob = p.isMoving ? Math.sin(p.animFrame * 0.25) * 2 : 0;
+    // Walking leg bobbing (or flight lift)
+    const walkBob = p.isFlying ? -flightLift : (p.isMoving ? Math.sin(p.animFrame * 0.25) * 2 : 0);
 
     // Check directional 2-frame motion sprite first, then fallback to idle / character / player
     const walkFrame = p.isMoving ? (Math.floor(p.animFrame / 8) % 2) : 0;
