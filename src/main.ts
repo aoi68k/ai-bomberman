@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const charSpecsModal = document.getElementById('charSpecsModal') as HTMLElement;
   const btnCloseCharSpecs = document.getElementById('btnCloseCharSpecs') as HTMLButtonElement;
   const charSpecsBody = document.getElementById('charSpecsBody') as HTMLElement;
+  const controlsGuide = document.querySelector<HTMLElement>('.controls-guide');
   const btnBackToTitle = document.getElementById('btnBackToTitle') as HTMLButtonElement;
   const btnBattleStart = document.getElementById('btnBattleStart') as HTMLButtonElement;
 
@@ -1180,6 +1181,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       timerBadge.classList.toggle('hidden', !showInGameHud);
       hudPlayers.classList.toggle('hidden', !showInGameHud);
       btnPauseOverlay.classList.toggle('hidden', !showInGameHud);
+      controlsGuide?.classList.toggle('hidden', stats.state !== 'TITLE');
 
       const isPaused = stats.state === 'PAUSED';
       const wasHidden = pauseScreen.classList.contains('hidden');
