@@ -62,8 +62,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const chkItemKick = document.getElementById('chkItemKick') as HTMLInputElement | null;
 
   const getItemSettings = (): ItemSettings => ({
-    shield: chkItemShield ? chkItemShield.checked : true,
-    chainBomb: chkItemChainBomb ? chkItemChainBomb.checked : true,
+    shield: chkItemShield ? chkItemShield.checked : false,
+    chainBomb: chkItemChainBomb ? chkItemChainBomb.checked : false,
     kick: chkItemKick ? chkItemKick.checked : true,
   });
 

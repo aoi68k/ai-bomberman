@@ -35,8 +35,8 @@ export interface ItemSettings {
 }
 
 export const DEFAULT_ITEM_SETTINGS: ItemSettings = {
-  shield: true,
-  chainBomb: true,
+  shield: false,
+  chainBomb: false,
   kick: true,
 };
 
