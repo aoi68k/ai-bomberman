@@ -51,11 +51,39 @@ export class AIController {
       }
     }
 
-    // 2. Mark bomb blast areas
-    for (const bomb of bombManager.bombs) {
+    // 2. Compute effective fuse times including chain reactions
+    const bombs = bombManager.bombs;
+    const effectiveFuse = bombs.map((b) => Math.max(2, b.timer));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = 0; i < bombs.length; i++) {
+        const bi = bombs[i];
+        const ti = effectiveFuse[i];
+        for (const { dx, dy } of DIRS) {
+          for (let dist = 1; dist <= bi.power; dist++) {
+            const tx = bi.tileX + dx * dist;
+            const ty = bi.tileY + dy * dist;
+            if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) break;
+            const tile = map.getTile(tx, ty);
+            if (tile === TILE.WALL || tile === TILE.SOFT_BLOCK) break;
+            for (let j = 0; j < bombs.length; j++) {
+              if (i !== j && bombs[j].tileX === tx && bombs[j].tileY === ty && effectiveFuse[j] > ti) {
+                effectiveFuse[j] = ti;
+                changed = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Mark bomb blast areas using effective chain-reaction fuse times
+    for (let i = 0; i < bombs.length; i++) {
+      const bomb = bombs[i];
       const bx = bomb.tileX;
       const by = bomb.tileY;
-      const timeLeft = Math.max(2, bomb.timer);
+      const timeLeft = effectiveFuse[i];
 
       // Bomb tile itself is dangerous
       danger[by][bx] = danger[by][bx] === 0 ? timeLeft : Math.min(danger[by][bx], timeLeft);
@@ -189,9 +217,11 @@ export class AIController {
           if (adjacentSoftBlock || adjacentEnemy) {
             // Drop bomb!
             requestPlaceBomb(this.player);
-            // Immediately path to safety
+            // Immediately path to safety and commit to that escape path
             const newDanger = AIController.calculateDangerMap(map, bombManager);
             const immediateEscape = this.findPathToSafety(myTx, myTy, map, bombManager, newDanger);
+            this.currentPath = immediateEscape;
+            this.reevaluateTimer = 10;
             if (immediateEscape.length > 1) {
               this.stepAlongPath(immediateEscape[1], map, bombManager);
             }
@@ -213,9 +243,11 @@ export class AIController {
     // 3. EXECUTE MOVEMENT TOWARDS TARGET
     if (this.currentPath.length > 1) {
       const nextTile = this.currentPath[1];
-      // If next step became dangerous, stop and re-evaluate next frame
+      // If next step became dangerous (including lingering explosion flames), stop immediately and wait/re-evaluate
       if (dangerMap[nextTile.y][nextTile.x] > 0) {
+        this.currentPath = [];
         this.reevaluateTimer = 0;
+        this.player.move(0, 0, map, bombManager);
         return;
       }
 
@@ -224,7 +256,7 @@ export class AIController {
       // If reached tile center, advance path
       const targetPx = nextTile.x * TILE_SIZE + TILE_SIZE / 2;
       const targetPy = nextTile.y * TILE_SIZE + TILE_SIZE / 2;
-      if (Math.hypot(this.player.x - targetPx, this.player.y - targetPy) < 8) {
+      if (Math.hypot(this.player.x - targetPx, this.player.y - targetPy) < 6) {
         this.currentPath.shift();
       }
     } else {
@@ -491,7 +523,7 @@ export class AIController {
   ): TileCoord | null {
     const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
     let best: TileCoord | null = null;
-    let maxTimeLeft = -1;
+    let maxTimeLeft = 1; // Never step into active explosion flame (danger === 1)
 
     for (const { dx, dy } of dirs) {
       const nx = myTx + dx;
@@ -500,6 +532,7 @@ export class AIController {
       if (!map.isWalkable(nx, ny) || bombManager.getBombAt(nx, ny)) continue;
 
       const danger = dangerMap[ny][nx];
+      if (danger === 0) return { x: nx, y: ny };
       // Greater fuse time remaining is safer
       if (danger > maxTimeLeft) {
         maxTimeLeft = danger;
