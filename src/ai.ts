@@ -828,11 +828,15 @@ export class AIController {
       case 'AEMEATH_FLIGHT': {
         let step = 1;
         let softCount = 0;
-        const firstTx = myTx + dx;
-        const firstTy = myTy + dy;
-        if (firstTx >= 1 && firstTx < COLS - 1 && firstTy >= 1 && firstTy < ROWS - 1) {
-          if (map.getTile(firstTx, firstTy) === TILE.EMPTY) {
-            step = 2;
+        while (true) {
+          const tx = myTx + dx * step;
+          const ty = myTy + dy * step;
+          if (tx < 1 || tx >= COLS - 1 || ty < 1 || ty >= ROWS - 1) break;
+          const tile = map.getTile(tx, ty);
+          if (tile === TILE.EMPTY) {
+            step++;
+          } else {
+            break;
           }
         }
         while (true) {

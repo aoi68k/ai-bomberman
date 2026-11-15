@@ -1101,12 +1101,18 @@ export class GameManager {
         let step = 1;
         let softBlockCount = 0;
 
-        // Allow 0 or 1 empty tile in front of Aemeath before the soft block(s)
-        const firstTx = player.tileX + dx;
-        const firstTy = player.tileY + dy;
-        if (firstTx >= 1 && firstTx < 14 && firstTy >= 1 && firstTy < 12) {
-          if (this.map.getTile(firstTx, firstTy) === TILE.EMPTY) {
-            step = 2;
+        // Skip any empty tiles in front of Aemeath until hitting a soft block, wall, or border
+        while (true) {
+          const tx = player.tileX + dx * step;
+          const ty = player.tileY + dy * step;
+          if (tx < 1 || tx >= 14 || ty < 1 || ty >= 12) return false;
+          const tile = this.map.getTile(tx, ty);
+          if (tile === TILE.EMPTY) {
+            step++;
+          } else if (tile === TILE.SOFT_BLOCK) {
+            break;
+          } else {
+            return false;
           }
         }
 
@@ -1129,7 +1135,7 @@ export class GameManager {
         if (landTx < 1 || landTx >= 14 || landTy < 1 || landTy >= 12) return false;
         if (!this.map.isWalkable(landTx, landTy)) return false;
 
-        const duration = Math.min(28, 14 + softBlockCount * 4);
+        const duration = Math.min(36, 12 + step * 3);
         player.startFlight(landTx * 48 + 24, landTy * 48 + 24, duration);
         player.skillCooldownTimer = player.config.skillCooldown || 300;
         sounds.playKick();
