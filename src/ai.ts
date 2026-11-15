@@ -828,6 +828,13 @@ export class AIController {
       case 'AEMEATH_FLIGHT': {
         let step = 1;
         let softCount = 0;
+        const firstTx = myTx + dx;
+        const firstTy = myTy + dy;
+        if (firstTx >= 1 && firstTx < COLS - 1 && firstTy >= 1 && firstTy < ROWS - 1) {
+          if (map.getTile(firstTx, firstTy) === TILE.EMPTY) {
+            step = 2;
+          }
+        }
         while (true) {
           const tx = myTx + dx * step;
           const ty = myTy + dy * step;
@@ -848,7 +855,6 @@ export class AIController {
             landTy >= 1 &&
             landTy < ROWS - 1 &&
             map.isWalkable(landTx, landTy) &&
-            !bombManager.getBombAt(landTx, landTy) &&
             dangerMap[landTy][landTx] === 0
           ) {
             if (isCurrentTileDangerous || Math.random() < 0.35) {

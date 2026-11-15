@@ -1101,6 +1101,15 @@ export class GameManager {
         let step = 1;
         let softBlockCount = 0;
 
+        // Allow 0 or 1 empty tile in front of Aemeath before the soft block(s)
+        const firstTx = player.tileX + dx;
+        const firstTy = player.tileY + dy;
+        if (firstTx >= 1 && firstTx < 14 && firstTy >= 1 && firstTy < 12) {
+          if (this.map.getTile(firstTx, firstTy) === TILE.EMPTY) {
+            step = 2;
+          }
+        }
+
         while (true) {
           const tx = player.tileX + dx * step;
           const ty = player.tileY + dy * step;
