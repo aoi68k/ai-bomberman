@@ -6,6 +6,7 @@ import {
   CHARACTERS,
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
+  TILE,
   PlayerConfig,
   ItemSettings,
   DEFAULT_ITEM_SETTINGS,
