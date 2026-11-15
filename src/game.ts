@@ -102,6 +102,20 @@ export class GameManager {
     remainingFrames: number;
   }> = [];
 
+  public activeFlameWalls: Array<{
+    ownerId: number;
+    tileX: number;
+    tileY: number;
+    remainingFrames: number;
+  }> = [];
+
+  public activePhoenixFlames: Array<{
+    ownerId: number;
+    centerTx: number;
+    centerTy: number;
+    remainingFrames: number;
+  }> = [];
+
   private isRunning: boolean = false;
   private animFrameId: number | null = null;
 
@@ -300,6 +314,8 @@ export class GameManager {
     this.activeTempestZones = [];
     this.activeSpearStrikes = [];
     this.activeSanctuaryZones = [];
+    this.activeFlameWalls = [];
+    this.activePhoenixFlames = [];
 
     for (const p of this.players) {
       p.reset();
@@ -554,23 +570,30 @@ export class GameManager {
       }
     }
 
-    // Update active tackles, slash sequences, and flights
+    // Update active tackles, slash sequences, flights, and Changli aerial/phoenix skills
     for (const p of this.players) {
       if (!p.isAlive) continue;
       if (p.isFlying) {
         this.updatePlayerFlight(p);
+      } else if (p.changliSkillTimer > 0) {
+        this.updateChangliSkill(p);
       } else if (p.slashSequenceTimer > 0) {
         this.updateChenSlashSequence(p);
       } else if (p.isTackling) {
         this.updatePlayerTackle(p);
       }
+      if (p.changliUltraTimer > 0) {
+        p.changliUltraTimer--;
+      }
     }
 
-    // Update Yangyang's wind slashes, 3x3 tempest zones, and Aemeath's spear strikes
+    // Update Yangyang's wind slashes, 3x3 tempest zones, Aemeath's spear strikes, Shorekeeper's sanctuaries, and Changli's flame effects
     this.updateWindSlashes();
     this.updateTempestZones();
     this.updateSpearStrikes();
     this.updateSanctuaryZones();
+    this.updateFlameWalls();
+    this.updatePhoenixFlames();
 
     // 1. Human players (1P + any Online Remote Guests) input, movement, skill, and ultra
     const p1 = this.players.find((p) => p.config.id === 0 && p.config.isHuman);
@@ -592,7 +615,7 @@ export class GameManager {
         (remote as any)._unconsumedDir = false;
       }
 
-      if (!hp.isTackling && hp.slashSequenceTimer <= 0 && !hp.isFlying) {
+      if (!hp.isTackling && hp.slashSequenceTimer <= 0 && !hp.isFlying && hp.changliSkillTimer <= 0 && hp.changliUltraTimer <= 0) {
         hp.move(hInput.dx, hInput.dy, this.map, this.bombManager, () => {
           sounds.playKick();
           this.emitSound('kick');
@@ -712,7 +735,7 @@ export class GameManager {
 
     // 5. Check damage from explosions
     for (const p of this.players) {
-      if (!p.isAlive || p.isFlying || this.isProtectedBySanctuary(p)) continue;
+      if (!p.isAlive || p.isImmuneToBombs || this.isProtectedBySanctuary(p)) continue;
 
       if (this.bombManager.explosions.isCellDangerous(p.tileX, p.tileY)) {
         const isFatal = p.hit();
@@ -900,7 +923,7 @@ export class GameManager {
    * Executes unique character skill
    */
   public tryUseSkill(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0) return false;
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0 || player.isFlying || player.changliSkillTimer > 0 || player.changliUltraTimer > 0) return false;
     if (player.skillCooldownTimer > 0) return false;
 
     const skillType = player.config.skillType;
@@ -1129,6 +1152,17 @@ export class GameManager {
         }
         return true;
       }
+
+      case 'CHANGLI_PHOENIX_ASCENT': {
+        // Ascend with 6 rapid slashes on own tile (3s stun), brief hover (blast immune), then slam down creating a Flame Wall
+        player.changliSkillTimer = 66;
+        player.skillCooldownTimer = player.config.skillCooldown || 360;
+        this.particles.addItemGetParticles(player.x, player.y, '#f97316');
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 160, 0.55, 0.3);
+        }
+        return true;
+      }
     }
 
     return false;
@@ -1138,7 +1172,7 @@ export class GameManager {
    * Executes Ultra Skill
    */
   public tryUseUltra(player: Player): boolean {
-    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0 || player.isFlying) return false;
+    if (!player.isAlive || player.stunTimer > 0 || player.isTackling || player.slashSequenceTimer > 0 || player.isFlying || player.changliSkillTimer > 0 || player.changliUltraTimer > 0) return false;
     if (player.ultraGauge < 10) return false;
 
     const ultraType = player.config.ultraType;
@@ -1311,6 +1345,56 @@ export class GameManager {
         this.broadcastStats();
         return true;
       }
+
+      case 'CHANGLI_PHOENIX_FLAME': {
+        // 3x3 Phoenix Flame centered on Changli: 3s stun to enemies, immediately detonates bombs in 3x3, blast-immune during ultra
+        player.ultraGauge = 0;
+        player.changliUltraTimer = 48;
+        const cx = player.tileX;
+        const cy = player.tileY;
+
+        this.activePhoenixFlames.push({
+          ownerId: player.config.id,
+          centerTx: cx,
+          centerTy: cy,
+          remainingFrames: 48,
+        });
+
+        // Immediately detonate all bombs within 3x3 area
+        for (const b of this.bombManager.bombs) {
+          if (Math.abs(b.tileX - cx) <= 1 && Math.abs(b.tileY - cy) <= 1) {
+            b.timer = 1;
+          }
+        }
+
+        // Stun all enemies within 3x3 area for 3 seconds (180 frames)
+        for (const other of this.players) {
+          if (
+            other.isAlive &&
+            other.config.id !== player.config.id &&
+            !this.isProtectedFromAttack(other) &&
+            Math.abs(other.tileX - cx) <= 1 &&
+            Math.abs(other.tileY - cy) <= 1
+          ) {
+            other.stun(180);
+            this.particles.addItemGetParticles(other.x, other.y, '#f97316');
+            this.particles.addExplosionParticles(other.x, other.y, 10);
+            if (other.config.id === 0) {
+              this.input.vibrate(0, 280, 0.85, 0.5);
+            }
+          }
+        }
+
+        sounds.playExplosion();
+        this.emitSound('explosion');
+        this.particles.triggerShake(7, 16);
+        this.particles.addExplosionParticles(player.x, player.y, 20);
+        if (player.config.id === 0) {
+          this.input.vibrate(0, 260, 0.85, 0.5);
+        }
+        this.broadcastStats();
+        return true;
+      }
     }
 
     return false;
@@ -1350,7 +1434,7 @@ export class GameManager {
           other.isAlive &&
           other.config.id !== ws.ownerId &&
           !ws.hitEnemies.has(other.config.id) &&
-          !this.isProtectedBySanctuary(other)
+          !this.isProtectedFromAttack(other)
         ) {
           if (Math.hypot(other.x - ws.x, other.y - ws.y) < 34) {
             ws.hitEnemies.add(other.config.id);
@@ -1395,7 +1479,7 @@ export class GameManager {
 
       // Stun any opponent inside the 3x3 zone for 2 seconds (120 frames)
       for (const other of this.players) {
-        if (other.isAlive && other.config.id !== zone.ownerId && other.stunTimer <= 0 && !this.isProtectedBySanctuary(other)) {
+        if (other.isAlive && other.config.id !== zone.ownerId && other.stunTimer <= 0 && !this.isProtectedFromAttack(other)) {
           if (Math.abs(other.x - centerPx) <= 72 && Math.abs(other.y - centerPy) <= 72) {
             other.stun(120);
             sounds.playKick();
@@ -1465,7 +1549,7 @@ export class GameManager {
 
           // Stun all enemies within 7x7 area for 4 seconds (240 frames)
           for (const other of this.players) {
-            if (other.isAlive && other.config.id !== strike.ownerId && !this.isProtectedBySanctuary(other)) {
+            if (other.isAlive && other.config.id !== strike.ownerId && !this.isProtectedFromAttack(other)) {
               if (Math.abs(other.tileX - strike.centerTx) <= 3 && Math.abs(other.tileY - strike.centerTy) <= 3) {
                 other.stun(240);
                 this.particles.addItemGetParticles(other.x, other.y, '#f472b6');
@@ -1495,12 +1579,139 @@ export class GameManager {
     );
   }
 
+  private isProtectedFromAttack(player: Player): boolean {
+    return this.isProtectedBySanctuary(player) || player.isImmuneToEnemyAttacks;
+  }
+
   private updateSanctuaryZones() {
     for (let i = this.activeSanctuaryZones.length - 1; i >= 0; i--) {
       const zone = this.activeSanctuaryZones[i];
       zone.remainingFrames--;
       if (zone.remainingFrames <= 0) {
         this.activeSanctuaryZones.splice(i, 1);
+      }
+    }
+  }
+
+  private updateChangliSkill(player: Player) {
+    if (!player.isAlive || player.changliSkillTimer <= 0) return;
+    // If stunned during hover (the only phase vulnerable to enemy attacks), cancel skill
+    if (player.stunTimer > 0 && player.isChangliHovering) {
+      player.changliSkillTimer = 0;
+      return;
+    }
+
+    const timerBefore = player.changliSkillTimer;
+    player.changliSkillTimer--;
+
+    // Ascent phase (66..31): 6 rapid slashes on own ground tile every 6 frames
+    if (timerBefore > 30 && (66 - timerBefore) % 6 === 0) {
+      const slashIndex = (66 - timerBefore) / 6;
+      const angle = (slashIndex * Math.PI) / 3;
+      const flip = slashIndex % 2 === 1;
+      this.particles.addSlashEffect(player.x, player.y, angle, 36, flip ? '#f97316' : '#ef4444', flip);
+      sounds.playKick();
+      this.emitSound('kick');
+
+      // Ground hitbox on Changli's tile: stuns enemies on the same tile for 3s (180 frames)
+      for (const other of this.players) {
+        if (
+          other.isAlive &&
+          other.config.id !== player.config.id &&
+          !this.isProtectedFromAttack(other) &&
+          other.tileX === player.tileX &&
+          other.tileY === player.tileY
+        ) {
+          other.stun(180);
+          this.particles.addItemGetParticles(other.x, other.y, '#f97316');
+          this.particles.addExplosionParticles(other.x, other.y, 6);
+          if (other.config.id === 0) {
+            this.input.vibrate(0, 200, 0.7, 0.35);
+          }
+        }
+      }
+    }
+
+    // Hover phase embers
+    if (timerBefore <= 30 && timerBefore > 12 && timerBefore % 4 === 0) {
+      this.particles.addItemGetParticles(player.x, player.y - 24, '#fb923c');
+    }
+
+    // Landing slam at timer === 0: create Flame Wall on Changli's tile & stun enemies on same tile
+    if (player.changliSkillTimer <= 0) {
+      player.changliSkillTimer = 0;
+      this.activeFlameWalls.push({
+        ownerId: player.config.id,
+        tileX: player.tileX,
+        tileY: player.tileY,
+        remainingFrames: 90, // 1.5s flame wall
+      });
+      sounds.playExplosion();
+      this.emitSound('explosion');
+      this.particles.triggerShake(5, 12);
+      this.particles.addExplosionParticles(player.x, player.y, 12);
+      this.particles.addItemGetParticles(player.x, player.y, '#f97316');
+
+      for (const other of this.players) {
+        if (
+          other.isAlive &&
+          other.config.id !== player.config.id &&
+          !this.isProtectedFromAttack(other) &&
+          other.tileX === player.tileX &&
+          other.tileY === player.tileY
+        ) {
+          other.stun(180);
+          this.particles.addItemGetParticles(other.x, other.y, '#ef4444');
+          if (other.config.id === 0) {
+            this.input.vibrate(0, 260, 0.85, 0.45);
+          }
+        }
+      }
+    }
+  }
+
+  private updateFlameWalls() {
+    for (let i = this.activeFlameWalls.length - 1; i >= 0; i--) {
+      const wall = this.activeFlameWalls[i];
+      wall.remainingFrames--;
+      for (const other of this.players) {
+        if (
+          other.isAlive &&
+          other.config.id !== wall.ownerId &&
+          !this.isProtectedFromAttack(other) &&
+          other.tileX === wall.tileX &&
+          other.tileY === wall.tileY
+        ) {
+          if (other.stunTimer < 165) {
+            other.stun(180);
+            this.particles.addItemGetParticles(other.x, other.y, '#f97316');
+            if (other.config.id === 0) {
+              this.input.vibrate(0, 200, 0.7, 0.35);
+            }
+          }
+        }
+      }
+      if (wall.remainingFrames <= 0) {
+        this.activeFlameWalls.splice(i, 1);
+      }
+    }
+  }
+
+  private updatePhoenixFlames() {
+    for (let i = this.activePhoenixFlames.length - 1; i >= 0; i--) {
+      const flame = this.activePhoenixFlames[i];
+      flame.remainingFrames--;
+      if (flame.remainingFrames % 6 === 0) {
+        const cx = flame.centerTx * 48 + 24;
+        const cy = flame.centerTy * 48 + 24;
+        this.particles.addItemGetParticles(
+          cx + (Math.random() - 0.5) * 110,
+          cy + (Math.random() - 0.5) * 110,
+          Math.random() < 0.5 ? '#f97316' : '#ef4444'
+        );
+      }
+      if (flame.remainingFrames <= 0) {
+        this.activePhoenixFlames.splice(i, 1);
       }
     }
   }
@@ -1532,7 +1743,7 @@ export class GameManager {
     ];
 
     for (const other of this.players) {
-      if (other.isAlive && other.config.id !== player.config.id && !this.isProtectedBySanctuary(other)) {
+      if (other.isAlive && other.config.id !== player.config.id && !this.isProtectedFromAttack(other)) {
         const hit = hitPoints.some((pt) => Math.hypot(other.x - pt.x, other.y - pt.y) < 36);
         if (hit) {
           other.stun(180); // 3 seconds stun
@@ -1632,7 +1843,7 @@ export class GameManager {
         other.isAlive &&
         other.config.id !== player.config.id &&
         !player.tackleHitEnemies.has(other.config.id) &&
-        !this.isProtectedBySanctuary(other)
+        !this.isProtectedFromAttack(other)
       ) {
         const dist = Math.hypot(other.x - player.x, other.y - player.y);
         if (dist < 36) {
@@ -1781,6 +1992,8 @@ export class GameManager {
     this.drawTempestZones(ctx);
     this.drawSpearStrikes(ctx);
     this.drawSanctuaryZones(ctx);
+    this.drawFlameWalls(ctx);
+    this.drawPhoenixFlames(ctx);
 
     if (this.state === 'COUNTDOWN') {
       const count = Math.ceil(this.countdownTimer / 60);
@@ -1997,6 +2210,86 @@ export class GameManager {
     }
   }
 
+  private drawFlameWalls(ctx: CanvasRenderingContext2D) {
+    if (this.activeFlameWalls.length === 0) return;
+    const now = Date.now();
+    for (const wall of this.activeFlameWalls) {
+      const px = wall.tileX * 48;
+      const py = wall.tileY * 48;
+      const fade = Math.min(1, wall.remainingFrames / 20);
+      const flicker = 0.75 + 0.25 * Math.sin(now / 55 + wall.tileX);
+
+      ctx.save();
+      // Base fiery tile glow
+      ctx.globalAlpha = 0.42 * fade * flicker;
+      ctx.fillStyle = '#f97316';
+      ctx.fillRect(px + 2, py + 2, 44, 44);
+
+      // Rising flame wall tongues
+      ctx.globalAlpha = 0.85 * fade;
+      const cx = px + 24;
+      const baseY = py + 42;
+      const grad = ctx.createLinearGradient(cx, baseY, cx, py + 4);
+      grad.addColorStop(0, '#dc2626');
+      grad.addColorStop(0.55, '#f97316');
+      grad.addColorStop(1, '#fef08a');
+      ctx.fillStyle = grad;
+
+      for (let k = -1; k <= 1; k++) {
+        const ox = cx + k * 11;
+        const h = 24 + 8 * Math.sin(now / 70 + k * 2.1);
+        ctx.beginPath();
+        ctx.moveTo(ox - 7, baseY);
+        ctx.quadraticCurveTo(ox, baseY - h, ox + 7, baseY);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = '#fb923c';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px + 2, py + 2, 44, 44);
+      ctx.restore();
+    }
+  }
+
+  private drawPhoenixFlames(ctx: CanvasRenderingContext2D) {
+    if (this.activePhoenixFlames.length === 0) return;
+    const now = Date.now();
+    for (const flame of this.activePhoenixFlames) {
+      const minTx = Math.max(1, flame.centerTx - 1);
+      const maxTx = Math.min(13, flame.centerTx + 1);
+      const minTy = Math.max(1, flame.centerTy - 1);
+      const maxTy = Math.min(11, flame.centerTy + 1);
+      const left = minTx * 48;
+      const top = minTy * 48;
+      const width = (maxTx - minTx + 1) * 48;
+      const height = (maxTy - minTy + 1) * 48;
+      const cx = flame.centerTx * 48 + 24;
+      const cy = flame.centerTy * 48 + 24;
+      const fade = Math.min(1, flame.remainingFrames / 16);
+      const pulse = 0.75 + 0.25 * Math.sin(now / 60);
+
+      ctx.save();
+      ctx.globalAlpha = 0.34 * fade * pulse;
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(left, top, width, height);
+
+      const rad = ctx.createRadialGradient(cx, cy, 8, cx, cy, Math.max(width, height) * 0.65);
+      rad.addColorStop(0, 'rgba(254, 240, 138, 0.75)');
+      rad.addColorStop(0.5, 'rgba(249, 115, 22, 0.45)');
+      rad.addColorStop(1, 'rgba(220, 38, 38, 0)');
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = rad;
+      ctx.fillRect(left, top, width, height);
+
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.strokeStyle = '#fb923c';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(left + 1.5, top + 1.5, width - 3, height - 3);
+      ctx.restore();
+    }
+  }
+
   private drawBigBanner(
     ctx: CanvasRenderingContext2D,
     mainText: string,
@@ -2103,6 +2396,8 @@ export class GameManager {
         flightProgress: p.flightProgress,
         flightTargetX: p.flightTargetX,
         flightTargetY: p.flightTargetY,
+        changliSkillTimer: p.changliSkillTimer,
+        changliUltraTimer: p.changliUltraTimer,
       })),
       windSlashes: this.activeWindSlashes.map((ws) => ({
         ownerId: ws.ownerId,
@@ -2115,6 +2410,8 @@ export class GameManager {
       tempestZones: this.activeTempestZones.map((tz) => ({ ...tz })),
       spearStrikes: this.activeSpearStrikes.map((ss) => ({ ...ss })),
       sanctuaryZones: this.activeSanctuaryZones.map((sz) => ({ ...sz })),
+      flameWalls: this.activeFlameWalls.map((fw) => ({ ...fw })),
+      phoenixFlames: this.activePhoenixFlames.map((pf) => ({ ...pf })),
       fxEvents: this.isOnlineHost ? this.particles.consumePendingFxEvents() : [],
       playerSlots: this.playerSlots.map((s) => ({ ...s })),
       itemSettings: { ...this.itemSettings },
@@ -2247,6 +2544,8 @@ export class GameManager {
         p.flightProgress = sp.flightProgress ?? 0;
         p.flightTargetX = sp.flightTargetX ?? p.x;
         p.flightTargetY = sp.flightTargetY ?? p.y;
+        p.changliSkillTimer = sp.changliSkillTimer ?? 0;
+        p.changliUltraTimer = sp.changliUltraTimer ?? 0;
       }
     }
 
@@ -2266,6 +2565,12 @@ export class GameManager {
     }
     if (snap.sanctuaryZones) {
       this.activeSanctuaryZones = snap.sanctuaryZones.map((sz) => ({ ...sz }));
+    }
+    if (snap.flameWalls) {
+      this.activeFlameWalls = snap.flameWalls.map((fw) => ({ ...fw }));
+    }
+    if (snap.phoenixFlames) {
+      this.activePhoenixFlames = snap.phoenixFlames.map((pf) => ({ ...pf }));
     }
 
     if (snap.fxEvents && snap.fxEvents.length > 0) {

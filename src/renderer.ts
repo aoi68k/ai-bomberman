@@ -532,17 +532,20 @@ export class GameRenderer {
       ctx.rotate(Math.sin(Date.now() / 90) * 0.12);
     }
 
-    const flightLift = p.isFlying ? Math.sin(p.flightProgress * Math.PI) * 34 : 0;
+    const changliLift = p.changliVisualLift;
+    const flightLift = (p.isFlying ? Math.sin(p.flightProgress * Math.PI) * 34 : 0) + changliLift;
+    const isElevated = p.isFlying || changliLift > 0;
 
     // Shadow
-    ctx.fillStyle = p.isFlying ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.4)';
+    ctx.fillStyle = isElevated ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
-    const shadowScale = p.isFlying ? Math.max(0.55, 1 - Math.sin(p.flightProgress * Math.PI) * 0.45) : 1;
+    const liftRatio = Math.min(1, flightLift / 48);
+    const shadowScale = isElevated ? Math.max(0.5, 1 - liftRatio * 0.45) : 1;
     ctx.ellipse(0, 16, 14 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Walking leg bobbing (or flight lift)
-    const walkBob = p.isFlying ? -flightLift : (p.isMoving ? Math.sin(p.animFrame * 0.25) * 2 : 0);
+    // Walking leg bobbing (or flight/Changli lift)
+    const walkBob = isElevated ? -flightLift : (p.isMoving ? Math.sin(p.animFrame * 0.25) * 2 : 0);
 
     // Check directional 2-frame motion sprite first, then fallback to idle / character / player
     const walkFrame = p.isMoving ? (Math.floor(p.animFrame / 8) % 2) : 0;

@@ -96,7 +96,9 @@ export class AIController {
       this.player.stunTimer > 0 ||
       this.player.isTackling ||
       this.player.slashSequenceTimer > 0 ||
-      this.player.isFlying
+      this.player.isFlying ||
+      this.player.changliSkillTimer > 0 ||
+      this.player.changliUltraTimer > 0
     ) {
       return;
     }
@@ -708,6 +710,19 @@ export class AIController {
         }
         return false;
       }
+
+      case 'CHANGLI_PHOENIX_FLAME': {
+        const enemyIn3x3 = allPlayers.some(
+          (p) => p.isAlive && p.config.id !== this.player.config.id && Math.abs(p.tileX - myTx) <= 1 && Math.abs(p.tileY - myTy) <= 1
+        );
+        const bombsIn3x3 = bombManager.bombs.filter(
+          (b) => Math.abs(b.tileX - myTx) <= 1 && Math.abs(b.tileY - myTy) <= 1
+        ).length;
+        if ((enemyIn3x3 && Math.random() < 0.75) || (bombsIn3x3 >= 1 && Math.random() < 0.45) || (isCurrentTileDangerous && Math.random() < 0.65)) {
+          return requestUseUltra(this.player);
+        }
+        return false;
+      }
     }
 
     return false;
@@ -855,6 +870,16 @@ export class AIController {
       case 'SHOREKEEPER_ERASE_BOMB': {
         const frontBomb = bombManager.getBombAt(myTx + dx, myTy + dy);
         if (frontBomb && (isCurrentTileDangerous || frontBomb.ownerId !== this.player.config.id || Math.random() < 0.35)) {
+          return requestUseSkill(this.player);
+        }
+        return false;
+      }
+
+      case 'CHANGLI_PHOENIX_ASCENT': {
+        const enemySameTile = allPlayers.some(
+          (p) => p.isAlive && p.config.id !== this.player.config.id && p.tileX === myTx && p.tileY === myTy
+        );
+        if (enemySameTile || (isCurrentTileDangerous && Math.random() < 0.7)) {
           return requestUseSkill(this.player);
         }
         return false;

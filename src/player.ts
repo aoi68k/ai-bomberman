@@ -65,6 +65,10 @@ export class Player {
   public flightProgress: number = 0;
   public flightDuration: number = 20;
 
+  // Changli's Phoenix Ascent (skill) & Phoenix Flame (ultra)
+  public changliSkillTimer: number = 0; // 66..31: Ascent (36f), 30..13: Hover (18f), 12..1: Descent (12f)
+  public changliUltraTimer: number = 0; // 48..1: Phoenix Flame active (blast immune)
+
   public isAlive: boolean = true;
   public deathTimer: number = 0; // For death spin animation
   public stunTimer: number = 0; // Stun duration in frames (stars over head, cannot act)
@@ -73,6 +77,41 @@ export class Player {
   public animFrame: number = 0;
   public isMoving: boolean = false;
   public invulnerableTimer: number = 0;
+
+  public get isChangliAscending(): boolean {
+    return this.changliSkillTimer > 30;
+  }
+
+  public get isChangliHovering(): boolean {
+    return this.changliSkillTimer > 12 && this.changliSkillTimer <= 30;
+  }
+
+  public get isChangliDescending(): boolean {
+    return this.changliSkillTimer > 0 && this.changliSkillTimer <= 12;
+  }
+
+  public get isImmuneToBombs(): boolean {
+    return this.isFlying || this.changliSkillTimer > 0 || this.changliUltraTimer > 0;
+  }
+
+  public get isImmuneToEnemyAttacks(): boolean {
+    return this.isChangliAscending || this.isChangliDescending;
+  }
+
+  public get changliVisualLift(): number {
+    if (this.changliSkillTimer > 30) {
+      const t = (66 - this.changliSkillTimer) / 36;
+      return t * 48;
+    }
+    if (this.changliSkillTimer > 12) {
+      return 48 + Math.sin(Date.now() / 80) * 3;
+    }
+    if (this.changliSkillTimer > 0) {
+      const t = (12 - this.changliSkillTimer) / 12;
+      return (1 - t) * 48;
+    }
+    return 0;
+  }
 
   constructor(config: PlayerConfig) {
     this.config = config;
@@ -117,6 +156,8 @@ export class Player {
     this.flightTargetY = 0;
     this.flightProgress = 0;
     this.flightDuration = 20;
+    this.changliSkillTimer = 0;
+    this.changliUltraTimer = 0;
     this.isAlive = true;
     this.deathTimer = 0;
     this.stunTimer = 0;

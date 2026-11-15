@@ -1,0 +1,22 @@
+{
+  "charId": "changli",
+  "name": "Changli",
+  "jpName": "長離",
+  "role": "離火 / 鳳凰",
+  "color": "#dc2626",
+  "subColor": "#fff1f2",
+  "accentColor": "#f97316",
+  "stats": {
+    "initialBombs": 1,
+    "initialPower": 2,
+    "initialSpeed": 2.6
+  },
+  "skillType": "CHANGLI_PHOENIX_ASCENT",
+  "skillName": "🔥 赫羽の昇華 (6連斬・炎壁)",
+  "skillDesc": "上昇しながら6連斬し、滞空後に急降下して炎の壁を作る。自マスに3秒スタン。上昇・降下は完全無敵、滞空は爆風無敵。CT6秒。",
+  "skillCooldown": 360,
+  "ultraType": "CHANGLI_PHOENIX_FLAME",
+  "ultraName": "🪶 離火・鳳凰の焔 (3x3即爆)",
+  "ultraDesc": "自分中心3x3に鳳凰の火焔を放ち3秒スタン＆範囲内の爆弾を即時起爆。発動中は爆風無敵。",
+  "ultraCooldown": 0
+}

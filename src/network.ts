@@ -42,6 +42,8 @@ export interface SerializedPlayer {
   flightProgress?: number;
   flightTargetX?: number;
   flightTargetY?: number;
+  changliSkillTimer?: number;
+  changliUltraTimer?: number;
 }
 
 export interface SerializedItem {
@@ -108,6 +110,20 @@ export interface SerializedSanctuaryZone {
   remainingFrames: number;
 }
 
+export interface SerializedFlameWall {
+  ownerId: number;
+  tileX: number;
+  tileY: number;
+  remainingFrames: number;
+}
+
+export interface SerializedPhoenixFlame {
+  ownerId: number;
+  centerTx: number;
+  centerTy: number;
+  remainingFrames: number;
+}
+
 export type SerializedFxEvent =
   | { kind: 'itemGet'; x: number; y: number; color?: string }
   | { kind: 'explosion'; x: number; y: number; count?: number }
@@ -142,6 +158,8 @@ export interface GameSnapshot {
   tempestZones: SerializedTempestZone[];
   spearStrikes?: SerializedSpearStrike[];
   sanctuaryZones?: SerializedSanctuaryZone[];
+  flameWalls?: SerializedFlameWall[];
+  phoenixFlames?: SerializedPhoenixFlame[];
   fxEvents?: SerializedFxEvent[];
   playerSlots?: PlayerSlotConfig[];
   itemSettings?: ItemSettings;
