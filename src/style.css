@@ -751,6 +751,14 @@ body.popup-mode .canvas-wrapper {
   text-transform: uppercase;
 }
 
+.title-logo-wrap {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 440px;
+}
+
 .title-logo-img {
   width: 100%;
   max-width: 440px;
@@ -758,6 +766,21 @@ body.popup-mode .canvas-wrapper {
   object-fit: contain;
   filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.8));
   margin: 4px 0;
+}
+
+.title-version {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 0.65rem;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(16, 18, 22, 0.72);
+  padding: 1px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+  user-select: none;
 }
 
 .title-logo-big {

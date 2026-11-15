@@ -8,9 +8,16 @@ import { assets } from './assets';
 import { CHARACTERS, PLAYER_SLOT_COLORS, loadCharacters, ItemSettings, DEFAULT_ITEM_SETTINGS } from './constants';
 import { NetworkManager, SoundEventName } from './network';
 
+declare const __APP_VERSION__: string;
+
 document.addEventListener('DOMContentLoaded', async () => {
   const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
   if (!canvas) return;
+
+  const titleVersionEl = document.getElementById('titleVersion');
+  if (titleVersionEl) {
+    titleVersionEl.textContent = __APP_VERSION__;
+  }
 
   // Preload character JSON definitions from characters/*/character.json, then load assets
   await loadCharacters();
