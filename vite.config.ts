@@ -1,17 +1,16 @@
 import { defineConfig } from 'vite';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 
 function getAppVersion(): string {
-  const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
-  const baseVersion = pkg.version || '1.0.0';
   try {
+    const commitCount = execSync('git rev-list --count HEAD', { encoding: 'utf8' }).trim();
     const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-    if (gitHash) return `v${baseVersion} (${gitHash})`;
+    if (commitCount && gitHash) return `v${commitCount} (${gitHash})`;
+    if (gitHash) return `v1 (${gitHash})`;
   } catch {
     // Fallback when git metadata is unavailable
   }
-  return `v${baseVersion}`;
+  return 'v1';
 }
 
 export default defineConfig({
