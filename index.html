@@ -61,7 +61,10 @@
             <div class="title-badge">ARCADE BATTLE ROYALE</div>
             <img src="assets/images/title_logo.png" alt="工業爆弾" class="title-logo-img" />
             <p class="title-sub">必殺技で戦うレトロアーケードバトル！</p>
-            <button id="btnStartSetup" class="primary-start-btn">▶ GAME START</button>
+            <div class="title-actions">
+              <button id="btnStartSetup" class="primary-start-btn">▶ GAME START</button>
+              <button id="btnCharSpecs" type="button" class="secondary-title-btn">📊 キャラ性能表</button>
+            </div>
             <div class="title-hint">Press [Enter] / [Space] or Gamepad (A) to Start</div>
           </div>
         </div>
@@ -137,6 +140,22 @@
               <button type="button" class="pause-menu-btn" data-action="fullscreen" id="pauseBtnFullscreen">⛶ 全画面切替</button>
             </div>
             <div id="pauseHint" class="pause-hint">十字キー:選択 / A:決定 / B・Start・P:再開</div>
+          </div>
+        </div>
+
+        <!-- 4. Character Specs Table Modal -->
+        <div id="charSpecsModal" class="screen-overlay hidden">
+          <div class="specs-modal-box">
+            <div class="specs-modal-header">
+              <div>
+                <h2>📊 キャラクター性能一覧表</h2>
+                <span class="specs-sub">※ 1秒 = 60フレーム (60F) / Ultraはボム10個設置で発動可能</span>
+              </div>
+              <button id="btnCloseCharSpecs" type="button" class="action-btn">✕ 閉じる</button>
+            </div>
+            <div id="charSpecsBody" class="specs-table-scroll">
+              <!-- Dynamically populated by main.ts -->
+            </div>
           </div>
         </div>
       </div>

@@ -45,6 +45,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const setupGrid = document.getElementById('setupGrid') as HTMLElement;
   const setupValidationMsg = document.getElementById('setupValidationMsg') as HTMLElement;
   const btnStartSetup = document.getElementById('btnStartSetup') as HTMLButtonElement;
+  const btnCharSpecs = document.getElementById('btnCharSpecs') as HTMLButtonElement;
+  const charSpecsModal = document.getElementById('charSpecsModal') as HTMLElement;
+  const btnCloseCharSpecs = document.getElementById('btnCloseCharSpecs') as HTMLButtonElement;
+  const charSpecsBody = document.getElementById('charSpecsBody') as HTMLElement;
   const btnBackToTitle = document.getElementById('btnBackToTitle') as HTMLButtonElement;
   const btnBattleStart = document.getElementById('btnBattleStart') as HTMLButtonElement;
 
@@ -683,14 +687,108 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  const DETAILED_SKILL_SPECS: Record<string, string> = {
+    DASH: '向いている方向へ即座に2マス瞬間移動（1F）。移動先に壁・爆弾がある場合は不発。無敵なし。',
+    REMOTE_DETONATE: '自分が最後に設置した爆弾1個を即座に起爆（残タイマー1F化）。無敵なし。',
+    MEGA_BOMB: '次に設置する爆弾1個の火力を +4（最大8）に強化。無敵なし。',
+    SHIELD_DEPLOY: '即座にバリアを1枚付与（最大2枚まで重複）。爆風1回を防ぎ、発動時無敵なし。',
+    TACKLE: '前方へ最大2マス突進（速度5.0px/F、約19F）。接触した敵を3秒（180F）スタンして停止。壁/爆弾衝突で停止。無敵なし。',
+    CHEN_SLASH_RUSH: '前方に0〜1マス斬撃を2回（計18F、9F間隔）繰り出した後、最大2マス突進斬り（速度5.2px/F、約18F）。命中した敵を3秒（180F）スタン。無敵なし。',
+    YANGYANG_WIND_SLASH: '前方2マスへ高速の風の斬撃波を発射（速度8.0px/F、12Fで到達）。壁で消滅し、命中した敵を2秒（120F）スタン。無敵なし。',
+    CHAIN_BOMB: '爆弾の上でA/スキルを押すと、向いている方向へ現在設置可能な残弾数ぶん爆弾を連続配置（1F）。無敵なし。',
+    AEMEATH_FLIGHT: '前方の壊せるブロックを飛び越えて着地（14〜28F、ブロック数で変動）。着地床が光り、爆弾の上にも着地可能（通過可）。飛行中は爆風に対して無敵。',
+    SHOREKEEPER_ERASE_BOMB: '向いている方向・目の前1マスの爆弾を爆発させずに即消滅（1F）。設置者の爆弾数も返却。無敵なし。',
+    CHANGLI_PHOENIX_ASCENT: '上昇（36F・6F毎に6連斬）→ 滞空（18F）→ 急降下（12F）し、着地時に1.5秒（90F）残る炎の壁を生成。上昇は見た目のみで自マスに3秒（180F）スタン判定。上昇中・降下中は爆弾と敵攻撃に無敵、滞空中は爆風のみ無敵。',
+  };
+
+  const DETAILED_ULTRA_SPECS: Record<string, string> = {
+    ULTRA_BLITZ_DASH: '前方へ3マス瞬間移動（1F）し、移動後1秒（60F）の無敵時間を獲得。移動先に壁・爆弾がある場合は不発。',
+    ULTRA_ALL_DETONATE: 'フィールド上の自分が設置した全爆弾を即座に起爆（1F）。爆弾が1つも無い場合は不発。無敵なし。',
+    ULTRA_NOVA_BOMB: 'その場に火力MAX（8）のメガボムを即時設置（1F）。設置上限に達している場合は不発。無敵なし。',
+    ULTRA_FORTRESS: 'バリアを最大（2枚）まで回復し、同時に2秒（120F）の完全無敵を付与。',
+    ULTRA_METEOR_TACKLE: '前方へ最大3マス高速突進（速度6.0px/F、約24F）。命中した敵を4秒（240F）スタンして停止。無敵なし。',
+    CHEN_TEMPEST_RUSH: '前方へ4マス高速乱れ斬り突進（速度6.0px/F、約32F、3F毎に斬撃）。命中した敵を3秒（180F）スタン（貫通）。無敵なし。',
+    YANGYANG_TEMPEST_ZONE: '前方1マス中心に3×3マスの嵐の領域を4秒間（240F）展開。領域内の敵を2秒（120F）スタン。無敵なし。',
+    AEMEATH_SPEAR_STRIKE: '自分中心に7×7マスの警告領域を表示し、1秒後（60F後）に巨大な槍が落下。範囲内の全爆弾を起爆せず排除し、敵を4秒（240F）スタン。無敵なし。',
+    SHOREKEEPER_SANCTUARY: '自分中心に5×5マスの聖域を5秒間（300F）展開。聖域内にいる発動者本人のみ、爆風および敵のあらゆる攻撃・スタンから無敵。',
+    CHANGLI_PHOENIX_FLAME: '自分中心3×3マスに鳳凰の火焔を展開（48F）。発動時に範囲内の敵を3秒（180F）スタン、範囲内の爆弾を即時起爆（1F後爆発）。技中（48F）は爆風に対して無敵。',
+  };
+
+  const renderCharSpecsTable = () => {
+    charSpecsBody.innerHTML = charList
+      .map((c) => {
+        const folder = c.folder || c.charId;
+        const portraitPath = `assets/images/characters/${folder}/portrait.png`;
+        const bombs = c.stats?.initialBombs ?? 1;
+        const power = Math.max(2, c.stats?.initialPower ?? 2);
+        const speed = c.stats?.initialSpeed ?? 2.6;
+        const skillCtFrames = c.skillCooldown || 0;
+        const skillCtSec = (skillCtFrames / 60).toFixed(1).replace(/\.0$/, '');
+        const skillDetail = DETAILED_SKILL_SPECS[c.skillType] || c.skillDesc;
+        const ultraDetail = DETAILED_ULTRA_SPECS[c.ultraType] || c.ultraDesc;
+        return `
+          <div class="spec-row" style="--spec-accent: ${c.accentColor || c.color}">
+            <div class="spec-portrait-col">
+              <img src="${portraitPath}" alt="${c.jpName}" class="spec-portrait-img" />
+              <div class="spec-char-name">${c.jpName}</div>
+              <div class="spec-char-role">${c.role}</div>
+            </div>
+            <div class="spec-stats-col">
+              <div class="spec-stat-item"><span class="spec-stat-label">💣 ボム</span><span class="spec-stat-val">${bombs}</span></div>
+              <div class="spec-stat-item"><span class="spec-stat-label">🔥 火力</span><span class="spec-stat-val">${power}</span></div>
+              <div class="spec-stat-item"><span class="spec-stat-label">👟 速度</span><span class="spec-stat-val">${speed}</span></div>
+            </div>
+            <div class="spec-abilities-col">
+              <div class="spec-ability-block">
+                <div class="spec-ability-head">
+                  <span class="spec-tag skill">SKILL</span>
+                  <span class="spec-ability-title">${c.skillName}</span>
+                  <span class="spec-ability-meta">CT: ${skillCtSec}秒 (${skillCtFrames}F)</span>
+                </div>
+                <div class="spec-ability-desc">${skillDetail}</div>
+              </div>
+              <div class="spec-ability-block">
+                <div class="spec-ability-head">
+                  <span class="spec-tag ultra">ULTRA</span>
+                  <span class="spec-ability-title">${c.ultraName}</span>
+                  <span class="spec-ability-meta">ボム10個設置</span>
+                </div>
+                <div class="spec-ability-desc">${ultraDetail}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  };
+
+  let titleFocus = 0; // 0: GAME START, 1: キャラ性能表
+  const renderTitleFocus = () => {
+    btnStartSetup.classList.toggle('pad-focused', showPadFocus && titleFocus === 0);
+    btnCharSpecs.classList.toggle('pad-focused', showPadFocus && titleFocus === 1);
+  };
+
+  const openCharSpecsModal = () => {
+    renderCharSpecsTable();
+    charSpecsBody.scrollTop = 0;
+    charSpecsModal.classList.remove('hidden');
+  };
+
+  const closeCharSpecsModal = () => {
+    charSpecsModal.classList.add('hidden');
+  };
+
   const showTitleScreen = () => {
     titleScreen.classList.remove('hidden');
     setupScreen.classList.add('hidden');
+    charSpecsModal.classList.add('hidden');
+    renderTitleFocus();
     game.showTitle();
   };
 
   const showSetupScreen = () => {
     titleScreen.classList.add('hidden');
+    charSpecsModal.classList.add('hidden');
     setupScreen.classList.remove('hidden');
     activeSlotIdx = net.role === 'GUEST' ? net.assignedSlot : 0;
     setupArea = 'roster';
@@ -721,10 +819,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   btnStartSetup.addEventListener('click', showSetupScreen);
+  btnCharSpecs.addEventListener('click', openCharSpecsModal);
+  btnCloseCharSpecs.addEventListener('click', closeCharSpecsModal);
+  charSpecsModal.addEventListener('click', (e) => {
+    if (e.target === charSpecsModal) closeCharSpecsModal();
+  });
   btnBackToTitle.addEventListener('click', showTitleScreen);
   btnBattleStart.addEventListener('click', startBattleFromSetup);
 
   window.addEventListener('keydown', (e) => {
+    if (!charSpecsModal.classList.contains('hidden')) {
+      if (e.code === 'Escape' || e.code === 'Backspace') {
+        e.preventDefault();
+        closeCharSpecsModal();
+      }
+      return;
+    }
     if (game.state === 'TITLE' && (e.code === 'Enter' || e.code === 'Space')) {
       e.preventDefault();
       showSetupScreen();
@@ -755,9 +865,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!hasInput) return;
 
     if (game.state === 'TITLE') {
+      showPadFocus = true;
+      if (!charSpecsModal.classList.contains('hidden')) {
+        if (input.cancel || input.confirm || input.start) {
+          closeCharSpecsModal();
+        } else if (input.dy !== 0) {
+          charSpecsBody.scrollTop += input.dy * 120;
+        }
+        return;
+      }
+      if (input.dy !== 0) {
+        titleFocus = titleFocus === 0 ? 1 : 0;
+        renderTitleFocus();
+        return;
+      }
       if (input.confirm || input.start) {
-        showPadFocus = true;
-        showSetupScreen();
+        if (titleFocus === 1) {
+          openCharSpecsModal();
+        } else {
+          showSetupScreen();
+        }
       }
       return;
     }
